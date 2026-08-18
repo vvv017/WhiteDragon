@@ -2,6 +2,11 @@ name: Build WhiteDragon userscript
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'src/parts/**'
+      - '.github/workflows/build-whitedragon.yml'
 
 permissions:
   contents: write
