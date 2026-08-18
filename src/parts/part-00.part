@@ -1,0 +1,179 @@
+// ==UserScript==
+// @name         白龍 WhiteDragon
+// @namespace    https://github.com/vvv017/WhiteDragon
+// @version      4.4.0
+// @description  Custom expression avatars for ChatGPT with streaming emotion switching, Project profiles, sticky positioning, and UI personalization.
+// @homepageURL  https://github.com/vvv017/WhiteDragon
+// @supportURL   https://github.com/vvv017/WhiteDragon/issues
+// @downloadURL  https://raw.githubusercontent.com/vvv017/WhiteDragon/main/whitedragon.user.js
+// @updateURL    https://raw.githubusercontent.com/vvv017/WhiteDragon/main/whitedragon.user.js
+// @match        https://chatgpt.com/*
+// @match        https://chat.openai.com/*
+// @grant        none
+// ==/UserScript==
+
+(() => {
+    'use strict';
+
+    const CFG = {
+        version: '4.4.0',
+        dbName: 'white_dragon_avatar_db',
+        dbVersion: 1,
+        storeName: 'avatars',
+        defaultProfile: 'default',
+        brandingKey: 'wda3_branding_settings_v1',
+        layoutKey: 'wda3_avatar_layout_v1',
+        importSize: 1536,
+        scanDelay: 120,
+        defaultLayout: { size: 64, gap: 14, topOffset: 0, stickyTop: 92 },
+        expressions: [
+            'neutral', 'smile', 'laugh', 'confused', 'annoyed',
+            'serious', 'surprised', 'sad', 'smug', 'thinking'
+        ]
+    };
+
+    const ID = { style: 'wda4-style', button: 'wda4-button', modal: 'wda4-modal' };
+    const CL = {
+        turn: 'wda4-turn', active: 'wda4-active', rail: 'wda4-rail', avatar: 'wda4-avatar',
+        changing: 'wda4-changing', backdrop: 'wda4-backdrop', modal: 'wda4-panel',
+        drag: 'wda4-drag', hint: 'wda4-hint', section: 'wda4-section', form: 'wda4-form',
+        field: 'wda4-field', color: 'wda4-color', preview: 'wda4-preview', slider: 'wda4-slider',
+        value: 'wda4-value', profile: 'wda4-profile', grid: 'wda4-grid', card: 'wda4-card',
+        actions: 'wda4-actions', danger: 'wda4-danger', note: 'wda4-note', code: 'wda4-code'
+    };
+    const SEL = {
+        turns: '[data-testid^="conversation-turn-"]',
+        assistant: '[data-message-author-role="assistant"]',
+        user: '[data-message-author-role="user"]',
+        messages: '[data-message-author-role="assistant"], [data-message-author-role="user"]'
+    };
+
+    const S = {
+        defaultPack: new Map(),
+        projectPacks: new Map(),
+        loaded: new Set(),
+        loading: new Map(),
+        observed: new Set(),
+        visible: new Set(),
+        activeTurn: null,
+        intersection: null,
+        scanTimer: null,
+        layoutRaf: null,
+        modalOffset: { x: 0, y: 0 },
+        brandNames: new Set(['ChatGPT'])
+    };
+
+    const $ = (selector, root = document) => root.querySelector(selector);
+    const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+    const uniq = values => [...new Set(values)];
+    const txt = value => String(value || '').replace(/\s+/g, ' ').trim();
+    const validRect = rect => Boolean(rect && rect.width > 1 && rect.height > 1 && Number.isFinite(rect.left));
+    const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+    const esc = value => String(value)
+        .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;').replaceAll("'", '&#39;');
+    const textNodes = root => {
+        if (!root) return [];
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+        const nodes = [];
+        let node;
+        while ((node = walker.nextNode())) nodes.push(node);
+        return nodes;
+    };
+    const readJson = (key, fallback = {}) => {
+        try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); }
+        catch (_) { return fallback; }
+    };
+
+    // ------------------------------------------------------------------
+    // Interface branding
+    // ------------------------------------------------------------------
+
+    const Brand = {
+        defaults: { name: 'ChatGPT', fontFamily: '', useColor: false, color: '#c4b5fd' },
+        value: null,
+        previous: 'ChatGPT',
+
+        normalize(input = {}) {
+            const name = String(input.name ?? 'ChatGPT')
+                .replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40) || 'ChatGPT';
+            const fontFamily = String(input.fontFamily ?? '')
+                .replace(/[\r\n\t]+/g, ' ').trim().slice(0, 160);
+            const color = /^#[0-9a-f]{6}$/i.test(String(input.color || ''))
+                ? String(input.color) : Brand.defaults.color;
+            return { name, fontFamily, useColor: Boolean(input.useColor), color };
+        },
+
+        load() {
+            Brand.value = Brand.normalize(readJson(CFG.brandingKey));
+            Brand.previous = Brand.value.name;
+            S.brandNames.add(Brand.value.name);
+            return Brand.value;
+        },
+
+        get() { return Brand.value || Brand.load(); },
+
+        save(input) {
+            const oldName = Brand.get().name;
+            Brand.previous = oldName;
+            Brand.value = Brand.normalize(input);
+            S.brandNames.add(oldName);
+            S.brandNames.add(Brand.value.name);
+            localStorage.setItem(CFG.brandingKey, JSON.stringify(Brand.value));
+            Brand.apply();
+            return Brand.value;
+        },
+
+        reset() { return Brand.save(Brand.defaults); },
+
+        names() {
+            return uniq(['ChatGPT', Brand.previous, Brand.get().name, ...S.brandNames])
+                .filter(Boolean).sort((a, b) => b.length - a.length);
+        },
+
+        match(value) {
+            const valueText = txt(value);
+            for (const name of Brand.names()) {
+                if (valueText === name) return { name, suffix: '' };
+                if (!valueText.startsWith(`${name} `)) continue;
+                const suffix = valueText.slice(name.length).trim();
+                if (/^(Pro|Plus|Team|Business|Enterprise|Free)$/i.test(suffix)) return { name, suffix };
+            }
+            return null;
+        },
+
+        titleCandidate(node, preferred = false) {
+            const parent = node?.parentElement;
+            const match = Brand.match(node?.nodeValue);
+            if (!parent || !match || parent.closest(`#${ID.modal}, ${SEL.messages}, form, textarea, input`)) return null;
+
+            const rect = parent.getBoundingClientRect();
+            if (!validRect(rect) || rect.bottom <= 0 || rect.top < -16 || rect.top > 130 || rect.width > 360 || rect.height > 80) return null;
+
+            const container = parent.closest('button, [role="button"], a, header, [role="banner"]') || parent;
+            const containerText = txt(container.innerText || container.textContent);
+            if (!containerText || containerText.length > 90) return null;
+
+            const plan = /\b(Pro|Plus|Team|Business|Enterprise|Free)\b/i.test(containerText);
+            const model = Boolean(
+                container.matches?.('[data-testid*="model"], [aria-label*="model" i]') ||
+                container.querySelector?.('[data-testid*="model"], [aria-label*="model" i]')
+            );
+            const sidebar = Boolean(parent.closest('aside, [data-testid*="sidebar"]'));
+            const score = rect.top * 3 + Math.min(rect.left, 1400) / 12
+                - (preferred ? 2200 : 0) - (model ? 2600 : 0) - (plan ? 1800 : 0) + (sidebar ? 600 : 0);
+            return { node, parent, match, score };
+        },
+
+        findTitle() {
+            const found = [];
+            const seen = new Set();
+            const preferred = $$([
+                'button[data-testid*="model"]', '[role="button"][data-testid*="model"]',
+                'button[aria-label*="model" i]', 'header button', 'header [role="button"]',
+                '[role="banner"] button', '[role="banner"] [role="button"]'
+            ].join(','));
+
+            for (const root of preferred) {
+                for (const node of textNodes(root)) {
+                    if (seen.has(node)) continue;
