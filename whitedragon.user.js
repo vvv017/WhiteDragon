@@ -1075,6 +1075,47 @@
             return `<div class="${CL.slider}"><label for="${id}">${label}</label><input id="${id}" type="range" min="${min}" max="${max}" step="1" value="${value}"><span id="${id}-value" class="${CL.value}">${value}px</span></div>`;
         },
 
+        async copyText(value, button, successLabel = 'Copied ✓') {
+            const original = button?.textContent || '';
+
+            try {
+                if (navigator.clipboard?.writeText) {
+                    await navigator.clipboard.writeText(value);
+                } else {
+                    const area = document.createElement('textarea');
+                    area.value = value;
+                    area.setAttribute('readonly', '');
+                    Object.assign(area.style, {
+                        position: 'fixed',
+                        left: '-9999px',
+                        top: '0',
+                        opacity: '0'
+                    });
+                    document.body.appendChild(area);
+                    area.select();
+
+                    if (!document.execCommand('copy')) {
+                        throw new Error('Clipboard copy was rejected.');
+                    }
+
+                    area.remove();
+                }
+
+                if (button) {
+                    button.textContent = successLabel;
+                    button.disabled = true;
+                    setTimeout(() => {
+                        if (!document.contains(button)) return;
+                        button.textContent = original;
+                        button.disabled = false;
+                    }, 1400);
+                }
+            } catch (error) {
+                console.error('[WhiteDragon] Clipboard copy failed:', error);
+                alert('Could not copy automatically. Please copy the instructions from CUSTOM_INSTRUCTIONS.md in the WhiteDragon repository.');
+            }
+        },
+
         async render() {
             const panel = $(`.${CL.modal}`, $(`#${ID.modal}`));
             if (!panel) return;
