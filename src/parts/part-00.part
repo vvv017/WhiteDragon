@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         白龍 WhiteDragon
 // @namespace    https://github.com/vvv017/WhiteDragon
-// @version      4.5.0
+// @version      4.5.1
 // @description  Custom expression avatars for ChatGPT with AI setup helpers, robust streaming markers, Project profiles, sticky positioning, and UI personalization.
 // @homepageURL  https://github.com/vvv017/WhiteDragon
 // @supportURL   https://github.com/vvv017/WhiteDragon/issues
@@ -16,7 +16,7 @@
     'use strict';
 
     const CFG = {
-        version: '4.5.0',
+        version: '4.5.1',
         dbName: 'white_dragon_avatar_db',
         dbVersion: 1,
         storeName: 'avatars',
@@ -34,16 +34,20 @@
 
     const AI_SETUP = {
         instructions: [
-            'Use WhiteDragon markers [[avatar:expression]] naturally throughout replies.',
+            'Use the exact WhiteDragon marker format [[avatar:expression]] naturally throughout replies.',
             'Available expressions: neutral, smile, laugh, confused, annoyed, serious, surprised, sad, smug, thinking.',
             'Choose expressions from the tone of the reply and switch when the mood meaningfully changes.',
+            'Do not rename, translate, abbreviate, or replace the marker format: use [[avatar:smile]], not [WhiteDragon:smile] or [avatar:smile].',
             'Put markers on their own line, never inside code blocks, and do not explain them unless asked.'
         ].join('\n'),
 
         testPrompt: [
             'Test WhiteDragon expression switching in one short reply.',
-            'Use several meaningful mood changes and include WhiteDragon avatar markers as you go.',
-            'Please include at least neutral, thinking, surprised, smile, and laugh.'
+            'Use the exact marker syntax [[avatar:expression]]; do not rename, translate, abbreviate, or substitute the format.',
+            'Use these exact markers in this order, each on its own line near the matching mood change:',
+            '[[avatar:neutral]], [[avatar:thinking]], [[avatar:surprised]], [[avatar:smile]], [[avatar:laugh]].',
+            'Do not use forms like [WhiteDragon:neutral], [avatar:neutral], or plain text labels.',
+            'Keep the reply short and make the text between markers naturally match each expression.'
         ].join(' '),
 
         avatarGenerationPrompt: [
