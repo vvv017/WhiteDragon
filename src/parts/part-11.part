@@ -1,3 +1,26 @@
+                            Expression.marker.lastIndex = 0;
+                            let match;
+
+                            while (
+                                (match = Expression.marker.exec(value)) !== null
+                            ) {
+                                const candidate =
+                                    match[1].toLowerCase();
+
+                                if (
+                                    CFG.expressions.includes(candidate)
+                                ) {
+                                    marker = candidate;
+                                }
+                            }
+
+                            Expression.marker.lastIndex = 0;
+
+                            if (marker) {
+                                markerElement = current;
+                                break;
+                            }
+                        }
                     }
 
                     if (current === root) break;
@@ -35,9 +58,11 @@
                     Chat.anchor(turn, message)
                 );
 
-                if (markerElement && !markerElement.closest('pre, code')) {
-                    markerElement.style.display = 'none';
-                    markerElement.dataset.wda4Marker = 'hidden';
+                if (
+                    markerElement &&
+                    !markerElement.closest('pre, code')
+                ) {
+                    Expression.strip(markerElement);
                 }
 
                 if (message) Expression.hide(message);
