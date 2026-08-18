@@ -6,6 +6,12 @@ WhiteDragon adds a character portrait beside ChatGPT replies and can switch expr
 
 > Current release: **4.4.1**
 
+## Quick install
+
+### **[▶ Install WhiteDragon v4.4.1](https://raw.githubusercontent.com/vvv017/WhiteDragon/main/whitedragon.user.js)**
+
+With Tampermonkey or Violentmonkey installed, the link above should open the userscript installation screen directly.
+
 ## Features
 
 - 10 built-in expression states: `neutral`, `smile`, `laugh`, `confused`, `annoyed`, `serious`, `surprised`, `sad`, `smug`, `thinking`
@@ -30,10 +36,11 @@ WhiteDragon adds a character portrait beside ChatGPT replies and can switch expr
 
 1. Install **Tampermonkey** or **Violentmonkey**.
 2. On Chromium-based browsers, make sure the extension is allowed to run userscripts.
-3. Open [`whitedragon.user.js`](whitedragon.user.js) and install it with your userscript manager.
-4. Reload ChatGPT.
-5. Click the **♥** button in the lower-right corner.
-6. Import your avatar images.
+3. Click **[Install WhiteDragon](https://raw.githubusercontent.com/vvv017/WhiteDragon/main/whitedragon.user.js)**.
+4. Confirm the installation in your userscript manager.
+5. Reload ChatGPT.
+6. Click the **♥** button in the lower-right corner.
+7. Import your avatar images.
 
 On its first run for a version, the installer downloads the readable source parts from this repository and caches the assembled source locally. Later page loads use that cached source.
 
