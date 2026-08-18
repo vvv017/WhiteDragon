@@ -1,0 +1,37 @@
+name: Build WhiteDragon userscript
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/parts/**'
+      - '.github/workflows/build-whitedragon.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Assemble userscript
+        shell: bash
+        run: |
+          cat src/parts/part-*.part > whitedragon.user.js
+          node --check whitedragon.user.js
+
+      - name: Commit generated userscript
+        shell: bash
+        run: |
+          if git diff --quiet -- whitedragon.user.js; then
+            echo "whitedragon.user.js is already up to date."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add whitedragon.user.js
+          git commit -m "Build WhiteDragon v4.4.0 userscript"
+          git push
