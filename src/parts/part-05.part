@@ -1,24 +1,107 @@
-                App.schedule(50);
-                const panel = $(`.${CL.modal}`, $(`#${ID.modal}`));
-                if (!panel) return;
-                const rect = panel.getBoundingClientRect();
-                if (rect.right < 60 || rect.left > innerWidth - 60 || rect.bottom < 40 || rect.top > innerHeight - 40) UI.center(panel);
-            }, { passive: true });
-            addEventListener('popstate', () => App.schedule(100));
+            ['surprised', /驚|惊|真的假的|居然|竟然|哇|wow|what\?!|unexpected/i],
+            ['confused', /蛤|啥|什麼|什么|不懂|看不懂|huh|\?{2,}/i],
+            ['thinking', /想一下|想想|思考|分析一下|let me think|hmm|thinking/i],
+            ['annoyed', /吐槽|嫌棄|嫌弃|離譜|离谱|無語|无语|annoy|seriously\?/i],
+            ['smug', /得意|哼哼|這不就|这不就|輕鬆|轻松|ez|smug/i],
+            ['smile', /好耶|太好了|沒問題|没问题|可以呀|nice|great|awesome|happy/i]
+        ],
 
-            window.WhiteDragonAvatar = Object.freeze({
-                version: CFG.version,
-                refresh: App.refresh,
-                openSettings: UI.open,
-                currentProfile: Profiles.current,
-                branding: Brand.get,
-                applyBranding: Brand.save,
-                layout: Layout.get,
-                applyLayout: Layout.save
-            });
-            console.info(`[WhiteDragon] ${CFG.version} loaded.`);
+        /*
+         * Return the newest valid marker currently present in the reply.
+         *
+         * The message DOM is scanned in text-node order, including markers
+         * that were visually hidden earlier. Code/pre blocks are ignored so
+         * a marker shown as an example does not change the real avatar.
+         */
+        latest(root, fallbackText = '') {
+            let source = String(fallbackText || '');
+
+            if (root) {
+                const parts = [];
+                const walker = document.createTreeWalker(
+                    root,
+                    NodeFilter.SHOW_TEXT,
+                    {
+                        acceptNode(node) {
+                            const parent = node.parentElement;
+
+                            return parent?.closest('pre, code')
+                                ? NodeFilter.FILTER_REJECT
+                                : NodeFilter.FILTER_ACCEPT;
+                        }
+                    }
+                );
+
+                while (walker.nextNode()) {
+                    parts.push(walker.currentNode.nodeValue || '');
+                }
+
+                source = parts.join('\n');
+            }
+
+            let latest = null;
+            let match;
+
+            Expression.marker.lastIndex = 0;
+
+            while ((match = Expression.marker.exec(source)) !== null) {
+                const candidate = match[1].toLowerCase();
+
+                if (CFG.expressions.includes(candidate)) {
+                    latest = candidate;
+                }
+            }
+
+            Expression.marker.lastIndex = 0;
+            return latest;
+        },
+
+        infer(text, message, turn) {
+            const marker = Expression.latest(message || turn, text);
+
+            if (CFG.expressions.includes(marker)) {
+                // Every newly-streamed marker replaces the previous one.
+                turn.dataset.wda4Expression = marker;
+                return marker;
+            }
+
+            const remembered = turn.dataset.wda4Expression;
+            if (CFG.expressions.includes(remembered)) return remembered;
+            if (!message) return 'thinking';
+
+            for (const [expression, pattern] of Expression.rules) {
+                if (pattern.test(text)) return expression;
+            }
+
+            return message.querySelector('pre, code') ||
+                message.querySelectorAll('li').length >= 3 ||
+                /首先|其次|結論|结论|總結|总结|步驟|步骤|分析|建議|建议/i.test(text)
+                ? 'serious'
+                : 'neutral';
+        },
+
+        hide(root) {
+            for (const element of $$('p, div, span', root)) {
+                if (element.closest('pre, code')) continue;
+
+                if (
+                    Expression.exact.test(
+                        String(element.textContent || '').trim()
+                    )
+                ) {
+                    element.style.display = 'none';
+                    element.dataset.wda4Marker = 'hidden';
+                }
+            }
         }
     };
 
-    App.boot().catch(error => console.error('[WhiteDragon] Boot failed:', error));
-})();
+    const Chat = {
+        turns() {
+            const fallback = $$(SEL.messages).map(message =>
+                message.closest('article') || message.closest('[data-testid*="conversation-turn"]') || message.parentElement
+            ).filter(Boolean);
+            return uniq([...$$(SEL.turns), ...fallback]);
+        },
+
+        message(turn) { return $(SEL.assistant, turn); },
