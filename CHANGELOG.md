@@ -1,5 +1,21 @@
 # Changelog
 
+## 4.5.0
+
+### Added
+
+- AI expression-control setup section in the settings panel.
+- One-click **Copy expression instructions** helper with a concise WhiteDragon marker prompt.
+- One-click **Copy test prompt** helper for checking multi-expression switching.
+- **Copy avatar generation prompt** beside avatar import for creating a 10-expression set from a user's own character reference image.
+- Token/usage disclosure explaining that each marker adds a small amount of output/context text.
+
+### Notes
+
+- WhiteDragon still does not inject instructions into prompts automatically.
+- WhiteDragon still does not ship a character art pack; users provide their own avatar images.
+- The unstable `Ask ChatGPT` composer-placeholder override remains intentionally removed.
+
 ## 4.4.2
 
 ### Fixed
@@ -8,14 +24,6 @@
 - Switch to an inline marker immediately during streaming.
 - Remove only the marker text while preserving surrounding paragraph content.
 - Handle inline markers even when ChatGPT splits the marker across nested span/text nodes.
-
-### Kept
-
-- Long Pro-thinking and tool-execution turns keep their avatar.
-- Composer placeholder (`Ask ChatGPT`) remains intentionally untouched for stability.
-- Header-only ChatGPT naming, font, and color customization.
-- Real-time multi-expression streaming.
-- Sticky avatar, Project avatar packs, high-quality images, and live layout controls.
 
 ## 4.4.1
 
