@@ -1,0 +1,107 @@
+            }
+            return { rail, image };
+        },
+
+        source(parts, profile, expression) {
+            const value = Profiles.source(profile.key, expression);
+            const image = parts.image;
+            if (image.dataset.expression === expression && image.dataset.profile === profile.key && image.getAttribute('src') === value) return;
+            image.classList.add(CL.changing);
+            image.src = value;
+            image.dataset.expression = expression;
+            image.dataset.profile = profile.key;
+            requestAnimationFrame(() => image.classList.remove(CL.changing));
+        },
+
+        position(turn, parts, anchor) {
+            if (!anchor) { parts.rail.style.display = 'none'; return; }
+            const turnRect = turn.getBoundingClientRect();
+            const anchorRect = anchor.getBoundingClientRect();
+            if (!validRect(turnRect) || !validRect(anchorRect)) { parts.rail.style.display = 'none'; return; }
+
+            const layout = Layout.get();
+            let left = anchorRect.left - turnRect.left - layout.size - layout.gap;
+            let top = anchorRect.top - turnRect.top + layout.topOffset;
+            if (turnRect.left + left < 6) {
+                left = Math.max(6 - turnRect.left, anchorRect.left - turnRect.left);
+                top = Math.max(0, anchorRect.top - turnRect.top);
+            }
+            Object.assign(parts.rail.style, { display: '', left: `${Math.round(left)}px`, top: `${Math.round(top)}px` });
+        },
+
+        remove(turn) {
+            $(`:scope > .${CL.rail}`, turn)?.remove();
+            turn.classList.remove(CL.turn, CL.active);
+            S.visible.delete(turn);
+        },
+
+        process(turn, profile) {
+            if (!Chat.isAssistant(turn)) { Avatar.remove(turn); return; }
+            const message = Chat.message(turn);
+            const content = message?.textContent || turn.textContent || '';
+            const expression = Expression.infer(content, message, turn);
+            const parts = Avatar.ensure(turn);
+            Avatar.source(parts, profile, expression);
+            Avatar.position(turn, parts, Chat.anchor(turn, message));
+            if (message) Expression.hide(message);
+        }
+    };
+
+    const Visibility = {
+        active(turn) {
+            if (S.activeTurn === turn) return;
+            S.activeTurn?.classList.remove(CL.active);
+            S.activeTurn = turn || null;
+            S.activeTurn?.classList.add(CL.active);
+        },
+
+        choose(turns = Chat.turns()) {
+            let chosen = null;
+            for (const turn of turns) if (S.visible.has(turn) && Chat.isAssistant(turn)) chosen = turn;
+            if (!chosen) {
+                for (const turn of turns) {
+                    if (!Chat.isAssistant(turn)) continue;
+                    const rect = turn.getBoundingClientRect();
+                    if (rect.bottom > 0 && rect.top < innerHeight) chosen = turn;
+                }
+            }
+            Visibility.active(chosen);
+        },
+
+        observer() {
+            if (S.intersection) return S.intersection;
+            S.intersection = new IntersectionObserver(entries => {
+                entries.forEach(entry => entry.isIntersecting && entry.intersectionRatio > 0
+                    ? S.visible.add(entry.target) : S.visible.delete(entry.target));
+                Visibility.choose();
+            }, { threshold: [0, 0.01] });
+            return S.intersection;
+        },
+
+        sync(turns) {
+            const observer = Visibility.observer();
+            const assistants = new Set(turns.filter(Chat.isAssistant));
+            for (const turn of [...S.observed]) {
+                if (assistants.has(turn) && document.contains(turn)) continue;
+                observer.unobserve(turn);
+                S.observed.delete(turn);
+                S.visible.delete(turn);
+                turn.classList.remove(CL.active);
+                if (S.activeTurn === turn) S.activeTurn = null;
+            }
+            for (const turn of assistants) {
+                if (S.observed.has(turn)) continue;
+                S.observed.add(turn);
+                observer.observe(turn);
+            }
+            Visibility.choose(turns);
+        }
+    };
+
+    // ------------------------------------------------------------------
+    // Settings UI
+    // ------------------------------------------------------------------
+
+    const UI = {
+        css() {
+            return `
