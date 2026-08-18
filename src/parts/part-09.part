@@ -20,7 +20,7 @@
             const clearLabel = profile.isProject ? 'Clear this Project pack' : 'Clear default pack';
 
             panel.innerHTML = `
-<div class="${CL.drag}" title="Drag to move · Double-click to center"><h2>White Dragon Avatar V4.5.0</h2><span class="${CL.hint}">⋮⋮ Drag · double-click to center</span></div>
+<div class="${CL.drag}" title="Drag to move · Double-click to center"><h2>White Dragon Avatar V4.5.1</h2><span class="${CL.hint}">⋮⋮ Drag · double-click to center</span></div>
 <p>Expression avatars, Project profiles, header naming, layout controls, and high-quality image importing.</p>
 <section class="${CL.section}">
 <h3>AI expression control</h3>
