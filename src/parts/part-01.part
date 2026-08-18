@@ -1,0 +1,320 @@
+                    seen.add(node);
+                    const candidate = Brand.titleCandidate(node, true);
+                    if (candidate) found.push(candidate);
+                }
+            }
+            for (const node of textNodes(document.body)) {
+                if (seen.has(node)) continue;
+                const candidate = Brand.titleCandidate(node, false);
+                if (candidate) found.push(candidate);
+            }
+            return found.sort((a, b) => a.score - b.score)[0] || null;
+        },
+
+        replaceNode(node, match) {
+            const raw = String(node.nodeValue || '');
+            const leading = raw.match(/^\s*/)?.[0] || '';
+            const trailing = raw.match(/\s*$/)?.[0] || '';
+            const replacement = match.suffix ? `${Brand.get().name} ${match.suffix}` : Brand.get().name;
+            if (txt(raw) !== replacement) node.nodeValue = `${leading}${replacement}${trailing}`;
+        },
+
+        styleTitle(element) {
+            const settings = Brand.get();
+            element.dataset.wda4Title = '1';
+            settings.fontFamily
+                ? element.style.setProperty('font-family', settings.fontFamily, 'important')
+                : element.style.removeProperty('font-family');
+            settings.useColor
+                ? element.style.setProperty('color', settings.color, 'important')
+                : element.style.removeProperty('color');
+        },
+
+        applyTitle() {
+            let live = false;
+            for (const element of $$('[data-wda4-title="1"]')) {
+                const rect = element.getBoundingClientRect();
+                if (!document.contains(element) || !validRect(rect) || rect.bottom <= 0 || rect.top >= 130) continue;
+                const node = textNodes(element).find(item => Brand.match(item.nodeValue));
+                if (node) Brand.replaceNode(node, Brand.match(node.nodeValue));
+                Brand.styleTitle(element);
+                live = true;
+            }
+            if (live) return;
+            const target = Brand.findTitle();
+            if (!target) return;
+            Brand.replaceNode(target.node, target.match);
+            Brand.styleTitle(target.parent);
+        },
+
+        prompt() { return `Ask ${Brand.get().name}`; },
+
+        editors() {
+            return uniq($$([
+                '#prompt-textarea', 'textarea[placeholder]', 'input[placeholder]',
+                '[contenteditable="true"][data-placeholder]', '[contenteditable="true"][aria-label]'
+            ].join(','))).filter(element => !element.closest(`#${ID.modal}, ${SEL.messages}`));
+        },
+
+        isEditor(element) {
+            if (element.id === 'prompt-textarea' || element.dataset.wda4Prompt === '1') return true;
+            return ['placeholder', 'data-placeholder', 'aria-label']
+                .map(attribute => element.getAttribute(attribute)).filter(Boolean)
+                .some(value => /\bChatGPT\b/i.test(value) || /^(Ask|Message)\s+/i.test(value));
+        },
+
+        applyComposer() {
+            const roots = new Set();
+            for (const editor of Brand.editors()) {
+                if (!Brand.isEditor(editor)) continue;
+                editor.dataset.wda4Prompt = '1';
+                for (const attribute of ['placeholder', 'data-placeholder', 'aria-label']) {
+                    if (editor.hasAttribute(attribute) || editor.id === 'prompt-textarea') {
+                        editor.setAttribute(attribute, Brand.prompt());
+                    }
+                }
+                roots.add(editor.closest('form') || editor.parentElement?.parentElement?.parentElement || editor.parentElement);
+            }
+
+            const known = new Set(Brand.names().flatMap(name => [`Ask ${name}`, `Message ${name}`]));
+            for (const root of roots) {
+                if (!root) continue;
+                for (const node of textNodes(root)) {
+                    const value = txt(node.nodeValue);
+                    if (!known.has(value)) continue;
+                    const raw = String(node.nodeValue || '');
+                    node.nodeValue = `${raw.match(/^\s*/)?.[0] || ''}${Brand.prompt()}${raw.match(/\s*$/)?.[0] || ''}`;
+                }
+            }
+        },
+
+        apply() { Brand.applyTitle(); Brand.applyComposer(); }
+    };
+
+    // ------------------------------------------------------------------
+    // Avatar layout
+    // ------------------------------------------------------------------
+
+    const Layout = {
+        saved: null,
+        previewValue: null,
+
+        normalize(input = {}) {
+            const number = (key, min, max) => {
+                const parsed = Number(input[key]);
+                const fallback = CFG.defaultLayout[key];
+                return clamp(Number.isFinite(parsed) ? Math.round(parsed) : fallback, min, max);
+            };
+            return {
+                size: number('size', 32, 128),
+                gap: number('gap', -40, 100),
+                topOffset: number('topOffset', -80, 120),
+                stickyTop: number('stickyTop', 0, 240)
+            };
+        },
+
+        load() {
+            Layout.saved = Layout.normalize(readJson(CFG.layoutKey));
+            Layout.previewValue = null;
+            Layout.applyVars(Layout.saved);
+            return Layout.saved;
+        },
+
+        get() { return Layout.previewValue || Layout.saved || Layout.load(); },
+
+        applyVars(value = Layout.get()) {
+            document.documentElement.style.setProperty('--wda4-size', `${value.size}px`);
+            document.documentElement.style.setProperty('--wda4-sticky', `${value.stickyTop}px`);
+        },
+
+        preview(input) {
+            Layout.previewValue = Layout.normalize(input);
+            Layout.applyVars(Layout.previewValue);
+            return Layout.previewValue;
+        },
+
+        save(input) {
+            Layout.saved = Layout.normalize(input);
+            Layout.previewValue = null;
+            localStorage.setItem(CFG.layoutKey, JSON.stringify(Layout.saved));
+            Layout.applyVars(Layout.saved);
+            App.refresh();
+            return Layout.saved;
+        },
+
+        reset() { return Layout.save(CFG.defaultLayout); }
+    };
+
+    // ------------------------------------------------------------------
+    // IndexedDB and image packs
+    // ------------------------------------------------------------------
+
+    const DB = {
+        promise: null,
+
+        open() {
+            if (DB.promise) return DB.promise;
+            DB.promise = new Promise((resolve, reject) => {
+                const request = indexedDB.open(CFG.dbName, CFG.dbVersion);
+                request.onupgradeneeded = () => {
+                    if (!request.result.objectStoreNames.contains(CFG.storeName)) {
+                        request.result.createObjectStore(CFG.storeName);
+                    }
+                };
+                request.onsuccess = () => {
+                    request.result.onversionchange = () => {
+                        request.result.close();
+                        DB.promise = null;
+                    };
+                    resolve(request.result);
+                };
+                request.onerror = () => { DB.promise = null; reject(request.error); };
+            });
+            return DB.promise;
+        },
+
+        async run(mode, work) {
+            const db = await DB.open();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(CFG.storeName, mode);
+                let result;
+                try { result = work(transaction.objectStore(CFG.storeName)); }
+                catch (error) { transaction.abort(); reject(error); return; }
+                transaction.oncomplete = () => resolve(result);
+                transaction.onerror = () => reject(transaction.error);
+                transaction.onabort = () => reject(transaction.error || new Error('IndexedDB transaction aborted.'));
+            });
+        },
+
+        read(keys) {
+            return DB.run('readonly', store => {
+                const output = new Map();
+                for (const key of keys) {
+                    const request = store.get(key);
+                    request.onsuccess = () => output.set(key, request.result ?? null);
+                }
+                return output;
+            });
+        },
+        put(entries) { return DB.run('readwrite', store => entries.forEach(([key, value]) => store.put(value, key))); },
+        remove(keys) { return DB.run('readwrite', store => keys.forEach(key => store.delete(key))); },
+        clear() { return DB.run('readwrite', store => store.clear()); }
+    };
+
+    const ImageTools = {
+        placeholder(expression) {
+            const label = esc(expression.slice(0, 2).toUpperCase());
+            const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f7f2ff"/><stop offset="1" stop-color="#ddd0ff"/></linearGradient></defs><circle cx="48" cy="48" r="46" fill="url(#g)" stroke="#b6a2e8" stroke-width="2"/><text x="48" y="56" text-anchor="middle" font-size="24" fill="#644ea8" font-family="Arial">${label}</text></svg>`;
+            return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+        },
+
+        readDataUrl(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(String(reader.result));
+                reader.onerror = () => reject(
+                    reader.error || new Error(`Could not read ${file.name}`)
+                );
+                reader.readAsDataURL(file);
+            });
+        },
+
+        async optimize(file) {
+            const url = URL.createObjectURL(file);
+            const image = new Image();
+
+            try {
+                await new Promise((resolve, reject) => {
+                    image.onload = resolve;
+                    image.onerror = () => reject(
+                        new Error(`Could not load ${file.name}`)
+                    );
+                    image.src = url;
+                });
+            } finally {
+                URL.revokeObjectURL(url);
+            }
+
+            const width = image.naturalWidth || image.width;
+            const height = image.naturalHeight || image.height;
+            const longestSide = Math.max(width, height);
+
+            // Preserve the user's original bytes whenever the image is already
+            // a reasonable size. This avoids the old 256px WebP re-encoding
+            // and keeps transparency/detail intact.
+            if (longestSide <= CFG.importSize) {
+                return ImageTools.readDataUrl(file);
+            }
+
+            // Only unusually large images are resized, using a high-quality
+            // lossless PNG output.
+            const scale = CFG.importSize / longestSide;
+            const drawWidth = Math.max(1, Math.round(width * scale));
+            const drawHeight = Math.max(1, Math.round(height * scale));
+
+            const canvas = document.createElement('canvas');
+            canvas.width = drawWidth;
+            canvas.height = drawHeight;
+
+            const ctx = canvas.getContext('2d', { alpha: true });
+            if (!ctx) {
+                throw new Error('Could not create a canvas context.');
+            }
+
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.clearRect(0, 0, drawWidth, drawHeight);
+            ctx.drawImage(image, 0, 0, drawWidth, drawHeight);
+
+            return canvas.toDataURL('image/png');
+        }
+    };
+
+    const Profiles = {
+        current() {
+            const match = location.pathname.match(/\/g\/(g-p-([0-9a-f]+)(?:-[^/]+)?)(?:\/|$)/i);
+            if (!match) return { key: CFG.defaultProfile, routeId: null, label: 'Default / outside Projects', isProject: false };
+            return {
+                key: `g-p-${match[2].toLowerCase()}`,
+                routeId: match[1],
+                label: Profiles.label(match[1]),
+                isProject: true
+            };
+        },
+
+        label(routeId) {
+            try {
+                for (const link of $$(`a[href*="/g/${routeId}/project"], a[href*="/g/${routeId}/"]`)) {
+                    const value = txt(link.innerText || link.textContent);
+                    if (value.length >= 2 && value.length <= 120) return value;
+                }
+            } catch (_) {}
+            const slug = routeId.match(/^g-p-[0-9a-f]+-(.+)$/i)?.[1];
+            if (!slug) return 'ChatGPT Project';
+            try { return decodeURIComponent(slug).replace(/[-_]+/g, ' ').trim() || 'ChatGPT Project'; }
+            catch (_) { return slug.replace(/[-_]+/g, ' ').trim() || 'ChatGPT Project'; }
+        },
+
+        key(profileKey, expression) {
+            return profileKey === CFG.defaultProfile ? expression : `project-avatar::${profileKey}::${expression}`;
+        },
+
+        pack(profileKey) {
+            if (profileKey === CFG.defaultProfile) return S.defaultPack;
+            if (!S.projectPacks.has(profileKey)) S.projectPacks.set(profileKey, new Map());
+            return S.projectPacks.get(profileKey);
+        },
+
+        own(profileKey, expression) { return Profiles.pack(profileKey).get(expression) || null; },
+        source(profileKey, expression) {
+            return Profiles.own(profileKey, expression) || S.defaultPack.get(expression) || ImageTools.placeholder(expression);
+        },
+
+        async load(profile) {
+            if (S.loaded.has(profile.key)) return false;
+            if (S.loading.has(profile.key)) return S.loading.get(profile.key);
+
+            const promise = (async () => {
+                const keys = CFG.expressions.map(expression => Profiles.key(profile.key, expression));
+                const values = await DB.read(keys);
+                const pack = Profiles.pack(profile.key);
