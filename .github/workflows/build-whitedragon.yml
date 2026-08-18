@@ -34,5 +34,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add whitedragon.user.js
-          git commit -m "Build WhiteDragon v4.4.1 userscript"
+          git commit -m "Build WhiteDragon userscript"
           git push
