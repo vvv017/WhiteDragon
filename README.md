@@ -35,6 +35,8 @@ WhiteDragon adds a character portrait beside ChatGPT replies and can switch expr
 5. Click the **♥** button in the lower-right corner.
 6. Import your avatar images.
 
+On its first run for a version, the installer downloads the readable source parts from this repository and caches the assembled source locally. Later page loads use that cached source.
+
 ### Required image filenames
 
 ```text
@@ -106,10 +108,11 @@ The panel can be dragged while previewing changes. Double-click the panel header
 
 ## Privacy
 
-WhiteDragon runs locally in your browser.
+WhiteDragon runs locally in your browser after loading its source.
 
 - Avatar images are stored locally in IndexedDB.
-- UI preferences are stored locally.
+- UI preferences and the assembled source cache are stored locally.
+- On the first run of each version, the installer requests the source parts from `raw.githubusercontent.com`.
 - No API key, analytics, or telemetry are included.
 - The script does not send additional prompts or model requests.
 
@@ -126,7 +129,7 @@ ChatGPT changes frequently. If a UI update breaks WhiteDragon, open an issue wit
 
 ## Development
 
-The readable source is split across `src/parts/part-*.part`. GitHub Actions concatenates the parts into the installable `whitedragon.user.js` and runs:
+The readable source is split across `src/parts/part-*.part`. The root `whitedragon.user.js` is a small installable loader that fetches and caches those parts. The included GitHub Actions workflow can also concatenate the parts into a standalone userscript and validate it with:
 
 ```bash
 node --check whitedragon.user.js
