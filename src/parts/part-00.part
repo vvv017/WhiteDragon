@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         白龍 WhiteDragon
 // @namespace    https://github.com/vvv017/WhiteDragon
-// @version      4.4.2
-// @description  Custom expression avatars for ChatGPT with robust inline streaming markers, long-turn support, Project profiles, sticky positioning, and header customization.
+// @version      4.5.0
+// @description  Custom expression avatars for ChatGPT with AI setup helpers, robust streaming markers, Project profiles, sticky positioning, and UI personalization.
 // @homepageURL  https://github.com/vvv017/WhiteDragon
 // @supportURL   https://github.com/vvv017/WhiteDragon/issues
 // @downloadURL  https://raw.githubusercontent.com/vvv017/WhiteDragon/main/whitedragon.user.js
@@ -16,7 +16,7 @@
     'use strict';
 
     const CFG = {
-        version: '4.4.2',
+        version: '4.5.0',
         dbName: 'white_dragon_avatar_db',
         dbVersion: 1,
         storeName: 'avatars',
@@ -30,6 +30,38 @@
             'neutral', 'smile', 'laugh', 'confused', 'annoyed',
             'serious', 'surprised', 'sad', 'smug', 'thinking'
         ]
+    };
+
+    const AI_SETUP = {
+        instructions: [
+            'Use WhiteDragon markers [[avatar:expression]] naturally throughout replies.',
+            'Available expressions: neutral, smile, laugh, confused, annoyed, serious, surprised, sad, smug, thinking.',
+            'Choose expressions from the tone of the reply and switch when the mood meaningfully changes.',
+            'Put markers on their own line, never inside code blocks, and do not explain them unless asked.'
+        ].join('\n'),
+
+        testPrompt: [
+            'Test WhiteDragon expression switching in one short reply.',
+            'Use several meaningful mood changes and include WhiteDragon avatar markers as you go.',
+            'Please include at least neutral, thinking, surprised, smile, and laugh.'
+        ].join(' '),
+
+        avatarGenerationPrompt: [
+            'Use the character reference image I provide to create a consistent WhiteDragon expression avatar set.',
+            '',
+            'Create 10 separate square avatar images of the same character:',
+            'neutral, smile, laugh, confused, annoyed, serious, surprised, sad, smug, thinking.',
+            '',
+            'Keep the character identity, hairstyle, clothing, accessories, colors, art style, camera angle, framing, scale, and lighting consistent across all images.',
+            'Only change the facial expression and small natural pose details needed to communicate the emotion.',
+            '',
+            'Use a clean transparent background if possible.',
+            'Do not add text, labels, borders, speech bubbles, or extra characters.',
+            'Keep the face clearly readable at small avatar sizes and avoid large composition changes between expressions.',
+            '',
+            'Output each expression as an individual image suitable for these filenames:',
+            'neutral.png, smile.png, laugh.png, confused.png, annoyed.png, serious.png, surprised.png, sad.png, smug.png, thinking.png.'
+        ].join('\n')
     };
 
     const ID = { style: 'wda4-style', button: 'wda4-button', modal: 'wda4-modal' };
@@ -105,8 +137,3 @@
         },
 
         load() {
-            Brand.value = Brand.normalize(readJson(CFG.brandingKey));
-            Brand.previous = Brand.value.name;
-            S.brandNames.add(Brand.value.name);
-            return Brand.value;
-        },
