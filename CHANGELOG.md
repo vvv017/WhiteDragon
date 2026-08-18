@@ -1,23 +1,29 @@
 # Changelog
 
-## 4.4.1
+## 4.4.2
 
-Stable hotfix release based on 4.4.0.
+### Fixed
+
+- Detect expression markers appended to normal paragraphs, not only short standalone marker lines.
+- Switch to an inline marker immediately during streaming.
+- Remove only the marker text while preserving surrounding paragraph content.
+- Handle inline markers even when ChatGPT splits the marker across nested span/text nodes.
+
+### Kept
+
+- Long Pro-thinking and tool-execution turns keep their avatar.
+- Composer placeholder (`Ask ChatGPT`) remains intentionally untouched for stability.
+- Header-only ChatGPT naming, font, and color customization.
+- Real-time multi-expression streaming.
+- Sticky avatar, Project avatar packs, high-quality images, and live layout controls.
+
+## 4.4.1
 
 ### Fixed
 
 - Keep the avatar visible during very long Pro-thinking and tool-execution turns.
 - Remove the unstable `Ask ChatGPT` composer-placeholder override.
 - Avoid the severe MutationObserver/React feedback loop caused by composer branding.
-
-### Kept
-
-- Header-only ChatGPT naming, font, and color customization.
-- Real-time streaming expression switching.
-- Robust split-node marker detection and marker hiding.
-- Sticky long-message avatar and single-visible-avatar behavior.
-- Default and per-Project avatar packs.
-- High-quality local image storage and live layout controls.
 
 ## 4.4.0
 
