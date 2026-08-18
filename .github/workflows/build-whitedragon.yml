@@ -2,11 +2,6 @@ name: Build WhiteDragon userscript
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - 'src/parts/**'
-      - '.github/workflows/build-whitedragon.yml'
 
 permissions:
   contents: write
@@ -34,5 +29,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add whitedragon.user.js
-          git commit -m "Build WhiteDragon v4.4.0 userscript"
+          git commit -m "Build WhiteDragon v4.4.1 userscript"
           git push
