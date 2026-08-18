@@ -1,0 +1,183 @@
+            for (const turn of turns) if (S.visible.has(turn) && Chat.isAssistant(turn)) chosen = turn;
+            if (!chosen) {
+                for (const turn of turns) {
+                    if (!Chat.isAssistant(turn)) continue;
+                    const rect = turn.getBoundingClientRect();
+                    if (rect.bottom > 0 && rect.top < innerHeight) chosen = turn;
+                }
+            }
+            Visibility.active(chosen);
+        },
+
+        observer() {
+            if (S.intersection) return S.intersection;
+            S.intersection = new IntersectionObserver(entries => {
+                entries.forEach(entry => entry.isIntersecting && entry.intersectionRatio > 0
+                    ? S.visible.add(entry.target) : S.visible.delete(entry.target));
+                Visibility.choose();
+            }, { threshold: [0, 0.01] });
+            return S.intersection;
+        },
+
+        sync(turns) {
+            const observer = Visibility.observer();
+            const assistants = new Set(turns.filter(Chat.isAssistant));
+            for (const turn of [...S.observed]) {
+                if (assistants.has(turn) && document.contains(turn)) continue;
+                observer.unobserve(turn);
+                S.observed.delete(turn);
+                S.visible.delete(turn);
+                turn.classList.remove(CL.active);
+                if (S.activeTurn === turn) S.activeTurn = null;
+            }
+            for (const turn of assistants) {
+                if (S.observed.has(turn)) continue;
+                S.observed.add(turn);
+                observer.observe(turn);
+            }
+            Visibility.choose(turns);
+        }
+    };
+
+    // ------------------------------------------------------------------
+    // Settings UI
+    // ------------------------------------------------------------------
+
+    const UI = {
+        css() {
+            return `
+.${CL.turn}{position:relative!important;overflow:visible!important}
+.${CL.turn}:not(.${CL.active})>.${CL.rail}{visibility:hidden}
+.${CL.turn}.${CL.active}>.${CL.rail}{visibility:visible}
+.${CL.rail}{position:absolute;bottom:0;width:var(--wda4-size,64px);overflow:visible;pointer-events:none;z-index:50}
+.${CL.avatar}{position:sticky;top:var(--wda4-sticky,92px);display:block;width:var(--wda4-size,64px);height:var(--wda4-size,64px);object-fit:contain;image-rendering:auto;border-radius:50%;pointer-events:none;user-select:none;background:transparent;box-shadow:0 2px 10px #0002;opacity:1;transform:none;transition:opacity .15s,transform .15s}
+.${CL.avatar}.${CL.changing}{opacity:.58;transform:scale(.95)}
+#${ID.button}{position:fixed;right:18px;bottom:18px;width:44px;height:44px;border:0;border-radius:50%;background:linear-gradient(135deg,#f5f0ff,#ddd0ff);color:#6f4aa8;font-size:24px;line-height:1;cursor:pointer;box-shadow:0 6px 18px #0002;z-index:2147483001}
+.${CL.backdrop}{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;background:#0007;z-index:2147483002}
+.${CL.modal}{position:relative;width:min(720px,100%);max-height:min(88vh,920px);overflow:auto;padding:20px;border-radius:16px;background:#fff;color:#222;box-shadow:0 16px 40px #0004;font-family:Arial,sans-serif;will-change:transform}
+.${CL.drag}{position:sticky;top:-20px;z-index:20;display:flex;align-items:center;justify-content:space-between;gap:12px;margin:-20px -20px 14px;padding:14px 20px;border-bottom:1px solid #ece7f5;background:#fffffff7;backdrop-filter:blur(8px);cursor:grab;user-select:none;touch-action:none}
+.${CL.drag}:active{cursor:grabbing}.${CL.drag} h2{margin:0;font-size:22px;pointer-events:none}.${CL.hint}{color:#7a7188;font-size:12px;font-weight:600;white-space:nowrap;pointer-events:none}
+.${CL.modal} p{margin:8px 0;line-height:1.5}.${CL.section}{margin:16px 0;padding:14px;border:1px solid #dfd4fb;border-radius:12px;background:#faf8ff}.${CL.section} h3{margin:0 0 6px;font-size:17px}
+.${CL.form}{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px}.${CL.field}{display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:700;color:#40345f}.${CL.field} input[type=text]{box-sizing:border-box;width:100%;padding:9px 10px;border:1px solid #d8d0e9;border-radius:8px;background:#fff;color:#222;font:14px Arial}
+.${CL.color}{min-height:38px;display:flex;align-items:center;gap:10px}.${CL.color} input[type=color]{width:48px;height:34px;padding:2px;border:1px solid #d8d0e9;border-radius:8px;background:#fff;cursor:pointer}.${CL.color} label{display:flex;align-items:center;gap:6px;font-weight:500;color:#555}
+.${CL.preview}{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-top:12px;padding:10px 12px;border-radius:9px;background:#242424;color:#fff}.${CL.preview} small{color:#aaa}
+.${CL.slider}{display:grid;grid-template-columns:minmax(120px,1fr) minmax(180px,2fr) 58px;align-items:center;gap:10px;margin-top:10px}.${CL.slider}>label{font-size:13px;font-weight:700;color:#40345f}.${CL.slider} input{width:100%;accent-color:#7c5cc4}.${CL.value}{text-align:right;font:12px ui-monospace,monospace;color:#5e5e6d}
+.${CL.profile}{margin:12px 0;padding:10px 12px;border:1px solid #dfd4fb;border-radius:10px;background:#f4efff;color:#4d3a78;line-height:1.45}.${CL.grid}{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin:14px 0 18px}.${CL.card}{padding:10px;border:1px solid #e5e0f4;border-radius:12px;background:#faf8ff}.${CL.card} img{display:block;width:64px;height:64px;margin-bottom:8px;border:1px solid #ebe5fb;border-radius:50%;object-fit:contain;image-rendering:auto}.${CL.card} b{display:block;margin-bottom:4px;font-size:14px}.${CL.card} small{color:#666}.${CL.card} small[data-kind=project]{color:#6547a8;font-weight:700}
+.${CL.actions}{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px}.${CL.actions} button,.${CL.actions} label{padding:10px 14px;border:0;border-radius:10px;background:#ece5ff;color:#432f7f;cursor:pointer;font-size:14px;font-weight:700}.${CL.actions} .${CL.danger}{background:#ffe8e8;color:#8b3f3f}.${CL.actions} input{display:none}.${CL.note}{color:#5e5e6d;font-size:13px}.${CL.code}{margin-top:10px;padding:12px;border-radius:10px;background:#f6f6f8;white-space:pre-wrap;word-break:break-word;font:13px ui-monospace,monospace}
+@media(max-width:900px){.${CL.form}{grid-template-columns:1fr}.${CL.slider}{grid-template-columns:1fr;gap:5px}.${CL.value}{text-align:left}#${ID.button}{right:12px;bottom:12px}}
+`;
+        },
+
+        install() {
+            let style = $(`#${ID.style}`);
+            if (!style) {
+                style = document.createElement('style');
+                style.id = ID.style;
+                document.head.appendChild(style);
+            }
+            style.textContent = UI.css();
+            UI.button();
+        },
+
+        button() {
+            if ($(`#${ID.button}`)) return;
+            const button = document.createElement('button');
+            button.id = ID.button;
+            button.type = 'button';
+            button.title = 'Configure avatars and interface';
+            button.textContent = '♥';
+            button.addEventListener('click', UI.open);
+            document.body.appendChild(button);
+        },
+
+        close() { $(`#${ID.modal}`)?.remove(); },
+        offset(panel) { if (panel) panel.style.transform = `translate3d(${S.modalOffset.x}px,${S.modalOffset.y}px,0)`; },
+        center(panel) { S.modalOffset = { x: 0, y: 0 }; UI.offset(panel); },
+
+        drag(panel) {
+            const handle = $(`.${CL.drag}`, panel);
+            if (!handle || handle.dataset.ready) return;
+            handle.dataset.ready = '1';
+            UI.offset(panel);
+            let active = false, pointer = null, startX = 0, startY = 0, originX = 0, originY = 0, rect = null;
+
+            const finish = event => {
+                if (!active) return;
+                active = false;
+                try { if (pointer !== null && handle.hasPointerCapture(pointer)) handle.releasePointerCapture(pointer); }
+                catch (_) {}
+                pointer = null;
+                event?.preventDefault?.();
+            };
+
+            handle.addEventListener('pointerdown', event => {
+                if (event.button !== 0) return;
+                active = true;
+                pointer = event.pointerId;
+                startX = event.clientX;
+                startY = event.clientY;
+                originX = S.modalOffset.x;
+                originY = S.modalOffset.y;
+                rect = panel.getBoundingClientRect();
+                try { handle.setPointerCapture(pointer); } catch (_) {}
+                event.preventDefault();
+            });
+            handle.addEventListener('pointermove', event => {
+                if (!active || event.pointerId !== pointer || !rect) return;
+                const dx = clamp(event.clientX - startX, 90 - rect.right, innerWidth - 90 - rect.left);
+                const dy = clamp(event.clientY - startY, -rect.top, innerHeight - 48 - rect.top);
+                S.modalOffset = { x: Math.round(originX + dx), y: Math.round(originY + dy) };
+                UI.offset(panel);
+                event.preventDefault();
+            });
+            handle.addEventListener('pointerup', finish);
+            handle.addEventListener('pointercancel', finish);
+            handle.addEventListener('dblclick', event => { UI.center(panel); event.preventDefault(); });
+        },
+
+        async open() {
+            UI.close();
+            const backdrop = document.createElement('div');
+            backdrop.id = ID.modal;
+            backdrop.className = CL.backdrop;
+            backdrop.addEventListener('click', event => { if (event.target === backdrop) UI.close(); });
+            const panel = document.createElement('div');
+            panel.className = CL.modal;
+            backdrop.appendChild(panel);
+            document.body.appendChild(backdrop);
+            UI.offset(panel);
+            await UI.render();
+        },
+
+        slider(id, label, min, max, value) {
+            return `<div class="${CL.slider}"><label for="${id}">${label}</label><input id="${id}" type="range" min="${min}" max="${max}" step="1" value="${value}"><span id="${id}-value" class="${CL.value}">${value}px</span></div>`;
+        },
+
+        async render() {
+            const panel = $(`.${CL.modal}`, $(`#${ID.modal}`));
+            if (!panel) return;
+            const profile = Profiles.current();
+            await Profiles.load(profile);
+            const brand = Brand.get();
+            const layout = Layout.get();
+
+            const cards = CFG.expressions.map(expression => {
+                const own = Profiles.own(profile.key, expression);
+                const fallback = S.defaultPack.get(expression);
+                const status = own ? (profile.isProject ? 'Project image' : 'Default image')
+                    : (profile.isProject && fallback ? 'Default fallback' : 'Missing');
+                const kind = own && profile.isProject ? 'project' : '';
+                return `<div class="${CL.card}"><img src="${Profiles.source(profile.key, expression)}" alt="${esc(expression)}"><b>${esc(expression)}</b><small data-kind="${kind}">${esc(status)}</small></div>`;
+            }).join('');
+
+            const title = profile.isProject ? `Project: ${profile.label}` : 'Default avatar pack';
+            const importLabel = profile.isProject ? 'Import for this Project' : 'Import default images';
+            const clearLabel = profile.isProject ? 'Clear this Project pack' : 'Clear default pack';
+
+            panel.innerHTML = `
+<div class="${CL.drag}" title="Drag to move · Double-click to center"><h2>White Dragon Avatar V4.4</h2><span class="${CL.hint}">⋮⋮ Drag · double-click to center</span></div>
+<p>Expression avatars, Project profiles, interface naming, layout controls, and high-quality image importing.</p>
+<section class="${CL.section}"><h3>Interface name and title style</h3><p class="${CL.note}">“ChatGPT Pro” becomes “${esc(brand.name)} Pro”; the composer becomes “Ask ${esc(brand.name)}”.</p>
+<div class="${CL.form}"><label class="${CL.field}"><span>Assistant name</span><input id="wda4-brand-name" type="text" maxlength="40" value="${esc(brand.name)}" placeholder="Alice"></label><label class="${CL.field}"><span>Header font family</span><input id="wda4-brand-font" type="text" list="wda4-fonts" value="${esc(brand.fontFamily)}" placeholder='"Segoe UI", sans-serif'></label><div class="${CL.field}"><span>Header text color</span><div class="${CL.color}"><input id="wda4-brand-color" type="color" value="${esc(brand.color)}" ${brand.useColor ? '' : 'disabled'}><label><input id="wda4-brand-use-color" type="checkbox" ${brand.useColor ? 'checked' : ''}>Use custom color</label></div></div></div>
+<datalist id="wda4-fonts"><option value='"Segoe UI", sans-serif'><option value='Arial, sans-serif'><option value='Verdana, sans-serif'><option value='Georgia, serif'><option value='"Times New Roman", serif'><option value='"Courier New", monospace'><option value='"Comic Sans MS", cursive'></datalist>
+<div class="${CL.preview}"><div><strong id="wda4-brand-preview-name"></strong> <small>Pro</small></div><span id="wda4-brand-preview-prompt"></span></div><div class="${CL.actions}"><button id="wda4-brand-save">Apply interface style</button><button id="wda4-brand-reset">Reset to ChatGPT</button></div></section>
