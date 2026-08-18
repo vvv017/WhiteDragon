@@ -1,6 +1,12 @@
 # WhiteDragon — ChatGPT Expression Instructions
 
-Use WhiteDragon avatar markers naturally throughout replies.
+Use the exact WhiteDragon marker format `[[avatar:expression]]` naturally throughout replies.
+
+Do **not** rename, translate, abbreviate, or substitute the marker format. Keep `avatar` exactly as written and keep both pairs of square brackets.
+
+Valid example: `[[avatar:smile]]`
+
+Invalid examples: `[WhiteDragon:smile]`, `[avatar:smile]`, `WhiteDragon:smile`, translated labels, or other rewritten variants.
 
 ## Available markers
 
