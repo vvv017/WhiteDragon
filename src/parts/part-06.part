@@ -1,0 +1,107 @@
+
+        isAssistant(turn) {
+            if ($(SEL.user, turn)) return false;
+            if (Chat.message(turn)) return true;
+
+            /*
+             * Pro thinking and long tool runs can remain inside one
+             * conversation-turn before the final assistant message exists.
+             * Keep that real non-user turn classified as assistant regardless
+             * of trace length, so its avatar does not disappear midway.
+             */
+            if (!turn.matches?.(SEL.turns)) return false;
+            return Boolean(txt(turn.innerText || turn.textContent));
+        },
+
+        statusAnchor(turn) {
+            const turnRect = turn.getBoundingClientRect();
+            let nodes = $$('[aria-live], p, span, button, [role="button"]', turn);
+            if (!nodes.length) nodes = $$('div', turn);
+            const candidates = [];
+
+            for (const element of nodes) {
+                if (element.closest(`.${CL.rail}`)) continue;
+                const value = txt(element.innerText || element.textContent);
+                if (!value || value.length > 220) continue;
+                const rect = element.getBoundingClientRect();
+                if (!validRect(rect) || (turnRect.width && rect.width > turnRect.width * 0.92)) continue;
+
+                const left = rect.left - turnRect.left;
+                const top = rect.top - turnRect.top;
+                const control = element.matches('button, [role="button"]');
+                const action = /^(answer now|skip|stop|cancel|continue|respond now)$/i.test(value);
+                const right = turnRect.width > 0 && left > turnRect.width * 0.62;
+                candidates.push({ element, rect, left, top, control, action, right });
+            }
+
+            if (!candidates.length) return null;
+            const preferred = candidates.filter(item => !item.control && !item.action && !item.right);
+            const leftSide = candidates.filter(item => !item.right);
+            const pool = preferred.length ? preferred : (leftSide.length ? leftSide : candidates);
+            return pool.sort((a, b) => {
+                const score = item => Math.max(0, item.left) * 3 + Math.abs(item.top) +
+                    Math.min(1800, item.rect.width * item.rect.height / 900) +
+                    (item.control ? 4000 : 0) + (item.action ? 8000 : 0) + (item.right ? 6000 : 0);
+                return score(a) - score(b);
+            })[0].element;
+        },
+
+        anchor(turn, message) { return message || Chat.statusAnchor(turn); },
+
+        messageFromNode(node) {
+            const element = node?.nodeType === Node.TEXT_NODE
+                ? node.parentElement
+                : node;
+
+            if (!element) return null;
+
+            if (element.matches?.(SEL.assistant)) {
+                return element;
+            }
+
+            return element.closest?.(SEL.assistant) || null;
+        },
+
+        turnFromMessage(message) {
+            return message?.closest(SEL.turns) ||
+                message?.closest('article') ||
+                message?.closest('[data-testid*="conversation-turn"]') ||
+                message?.parentElement ||
+                null;
+        },
+
+        turnFromNode(node) {
+            const element = node?.nodeType === Node.TEXT_NODE
+                ? node.parentElement
+                : node;
+
+            if (!element) return null;
+
+            return element.closest?.(SEL.turns) ||
+                element.closest?.('article') ||
+                element.closest?.('[data-testid*="conversation-turn"]') ||
+                Chat.turnFromMessage(Chat.messageFromNode(node)) ||
+                null;
+        }
+    };
+
+    // ------------------------------------------------------------------
+    // Avatar placement and one-avatar visibility
+    // ------------------------------------------------------------------
+
+    const Avatar = {
+        ensure(turn) {
+            turn.classList.add(CL.turn);
+            let rail = $(`:scope > .${CL.rail}`, turn);
+            if (!rail) {
+                rail = document.createElement('div');
+                rail.className = CL.rail;
+                turn.prepend(rail);
+            }
+            let image = $(`:scope > .${CL.avatar}`, rail);
+            if (!image) {
+                image = document.createElement('img');
+                image.className = CL.avatar;
+                image.alt = '';
+                image.draggable = false;
+                rail.appendChild(image);
