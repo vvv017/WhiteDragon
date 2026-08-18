@@ -1,0 +1,106 @@
+                    }
+
+                    if (current === root) break;
+                    current = current.parentElement;
+                    if (current && !root.contains(current) && current !== root) break;
+                }
+
+                if (!marker) return;
+
+                updates.set(turn, {
+                    message,
+                    marker,
+                    markerElement
+                });
+            };
+
+            for (const mutation of mutations) {
+                inspectNode(mutation.target);
+
+                if (mutation.type === 'childList') {
+                    for (const node of mutation.addedNodes || []) inspectNode(node);
+                }
+            }
+
+            for (const [turn, update] of updates) {
+                const { message, marker, markerElement } = update;
+
+                turn.dataset.wda4Expression = marker;
+
+                const parts = Avatar.ensure(turn);
+                Avatar.source(parts, profile, marker);
+                Avatar.position(
+                    turn,
+                    parts,
+                    Chat.anchor(turn, message)
+                );
+
+                if (markerElement && !markerElement.closest('pre, code')) {
+                    markerElement.style.display = 'none';
+                    markerElement.dataset.wda4Marker = 'hidden';
+                }
+
+                if (message) Expression.hide(message);
+            }
+        },
+
+        schedule(delay = CFG.scanDelay) {
+            clearTimeout(S.scanTimer);
+            S.scanTimer = setTimeout(App.refresh, delay);
+        },
+
+        relevant(mutation) {
+            const nodes = [...(mutation.addedNodes || []), ...(mutation.removedNodes || [])];
+            if (mutation.type === 'childList' && nodes.length && nodes.every(node =>
+                node.nodeType === Node.ELEMENT_NODE && (node.matches?.(`.${CL.rail}`) || node.closest?.(`#${ID.modal}`))
+            )) return false;
+            const target = mutation.target.nodeType === Node.ELEMENT_NODE ? mutation.target : mutation.target.parentElement;
+            return !target?.closest?.(`#${ID.modal}, .${CL.rail}`);
+        },
+
+        async boot() {
+            App.cleanup();
+            Brand.load();
+            Layout.load();
+            UI.install();
+            await Profiles.load({ key: CFG.defaultProfile, routeId: null, label: 'Default / outside Projects', isProject: false });
+            App.refresh();
+
+            new MutationObserver(mutations => {
+                App.streamMarkers(mutations);
+
+                if (mutations.some(App.relevant)) {
+                    App.schedule();
+                }
+            }).observe(document.body, {
+                childList: true,
+                subtree: true,
+                characterData: true
+            });
+
+            addEventListener('resize', () => {
+                App.schedule(50);
+                const panel = $(`.${CL.modal}`, $(`#${ID.modal}`));
+                if (!panel) return;
+                const rect = panel.getBoundingClientRect();
+                if (rect.right < 60 || rect.left > innerWidth - 60 || rect.bottom < 40 || rect.top > innerHeight - 40) UI.center(panel);
+            }, { passive: true });
+            addEventListener('popstate', () => App.schedule(100));
+
+            window.WhiteDragonAvatar = Object.freeze({
+                version: CFG.version,
+                refresh: App.refresh,
+                openSettings: UI.open,
+                currentProfile: Profiles.current,
+                branding: Brand.get,
+                applyBranding: Brand.save,
+                applyHeaderBranding: Brand.save,
+                layout: Layout.get,
+                applyLayout: Layout.save
+            });
+            console.info(`[WhiteDragon] ${CFG.version} loaded.`);
+        }
+    };
+
+    App.boot().catch(error => console.error('[WhiteDragon] Boot failed:', error));
+})();
