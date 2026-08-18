@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         白龍 WhiteDragon
 // @namespace    https://github.com/vvv017/WhiteDragon
-// @version      4.4.1
-// @description  Custom expression avatars for ChatGPT with streaming emotion switching, long-turn support, Project profiles, sticky positioning, and header customization.
+// @version      4.4.2
+// @description  Custom expression avatars for ChatGPT with robust inline streaming markers, long-turn support, Project profiles, sticky positioning, and header customization.
 // @homepageURL  https://github.com/vvv017/WhiteDragon
 // @supportURL   https://github.com/vvv017/WhiteDragon/issues
 // @downloadURL  https://raw.githubusercontent.com/vvv017/WhiteDragon/main/whitedragon.user.js
@@ -16,7 +16,7 @@
     'use strict';
 
     const CFG = {
-        version: '4.4.1',
+        version: '4.4.2',
         dbName: 'white_dragon_avatar_db',
         dbVersion: 1,
         storeName: 'avatars',
@@ -105,3 +105,8 @@
         },
 
         load() {
+            Brand.value = Brand.normalize(readJson(CFG.brandingKey));
+            Brand.previous = Brand.value.name;
+            S.brandNames.add(Brand.value.name);
+            return Brand.value;
+        },
