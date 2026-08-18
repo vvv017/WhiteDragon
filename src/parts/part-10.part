@@ -88,20 +88,18 @@
                 for (let depth = 0; current && depth < 8; depth += 1) {
                     if (current.closest?.('pre, code')) return;
 
-                    const value = String(current.textContent || '').trim();
+                    /*
+                     * Do not require the marker's paragraph to be shorter than
+                     * an arbitrary character limit. A marker appended to the
+                     * end of a normal paragraph must switch expressions too.
+                     *
+                     * We intentionally do not inspect the whole message root
+                     * here, so long replies still avoid an O(full reply)
+                     * scan on every streamed token.
+                     */
+                    if (current !== root) {
+                        const value = String(
+                            current.textContent || ''
+                        ).trim();
 
-                    if (value.length <= 180 && value.includes('[[avatar:')) {
-                        Expression.marker.lastIndex = 0;
-                        let match;
-
-                        while ((match = Expression.marker.exec(value)) !== null) {
-                            const candidate = match[1].toLowerCase();
-                            if (CFG.expressions.includes(candidate)) marker = candidate;
-                        }
-
-                        Expression.marker.lastIndex = 0;
-
-                        if (marker) {
-                            if (Expression.exact.test(value)) markerElement = current;
-                            break;
-                        }
+                        if (value.includes('[[avatar:')) {
