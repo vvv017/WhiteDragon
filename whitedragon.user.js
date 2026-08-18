@@ -1138,14 +1138,34 @@
             const clearLabel = profile.isProject ? 'Clear this Project pack' : 'Clear default pack';
 
             panel.innerHTML = `
-<div class="${CL.drag}" title="Drag to move · Double-click to center"><h2>White Dragon Avatar V4.4.2</h2><span class="${CL.hint}">⋮⋮ Drag · double-click to center</span></div>
+<div class="${CL.drag}" title="Drag to move · Double-click to center"><h2>White Dragon Avatar V4.5.0</h2><span class="${CL.hint}">⋮⋮ Drag · double-click to center</span></div>
 <p>Expression avatars, Project profiles, header naming, layout controls, and high-quality image importing.</p>
+<section class="${CL.section}">
+<h3>AI expression control</h3>
+<p><strong>Manual setup required.</strong> WhiteDragon runs in your browser, so ChatGPT cannot see the userscript by itself.</p>
+<p class="${CL.note}">Copy the expression instructions below into ChatGPT Custom Instructions for all chats, or into a Project's instructions for just that Project. WhiteDragon never injects these instructions into your prompts automatically.</p>
+<p class="${CL.note}"><strong>Usage note:</strong> Each expression change adds a short <code>[[avatar:...]]</code> marker to the model's reply. This uses a small amount of additional output/context tokens, roughly comparable to a few short words. More frequent switching adds slightly more marker text, but the impact is usually negligible.</p>
+<div class="${CL.actions}">
+<button id="wda4-copy-ai-instructions">Copy expression instructions</button>
+<button id="wda4-copy-test-prompt">Copy test prompt</button>
+</div>
+<div class="${CL.code}">AI control status: instructions must be added to ChatGPT manually.</div>
+</section>
 <section class="${CL.section}"><h3>Header name and title style</h3><p class="${CL.note}">“ChatGPT Pro” becomes “${esc(brand.name)} Pro”. The composer placeholder is intentionally left unchanged for stability.</p>
 <div class="${CL.form}"><label class="${CL.field}"><span>Header name</span><input id="wda4-brand-name" type="text" maxlength="40" value="${esc(brand.name)}" placeholder="Alice"></label><label class="${CL.field}"><span>Header font family</span><input id="wda4-brand-font" type="text" list="wda4-fonts" value="${esc(brand.fontFamily)}" placeholder='"Segoe UI", sans-serif'></label><div class="${CL.field}"><span>Header text color</span><div class="${CL.color}"><input id="wda4-brand-color" type="color" value="${esc(brand.color)}" ${brand.useColor ? '' : 'disabled'}><label><input id="wda4-brand-use-color" type="checkbox" ${brand.useColor ? 'checked' : ''}>Use custom color</label></div></div></div>
 <datalist id="wda4-fonts"><option value='"Segoe UI", sans-serif'><option value='Arial, sans-serif'><option value='Verdana, sans-serif'><option value='Georgia, serif'><option value='"Times New Roman", serif'><option value='"Courier New", monospace'><option value='"Comic Sans MS", cursive'></datalist>
 <div class="${CL.preview}"><div><strong id="wda4-brand-preview-name"></strong> <small>Pro</small></div></div><div class="${CL.actions}"><button id="wda4-brand-save">Apply interface style</button><button id="wda4-brand-reset">Reset to ChatGPT</button></div></section>
 <section class="${CL.section}"><h3>Avatar size and position</h3><p class="${CL.note}">All controls preview immediately; Save only makes them survive reload.</p>${UI.slider('wda4-size','Avatar size',32,128,layout.size)}${UI.slider('wda4-gap','Horizontal position',-40,100,layout.gap)}${UI.slider('wda4-top','Vertical offset',-80,120,layout.topOffset)}${UI.slider('wda4-sticky','Sticky screen height',0,240,layout.stickyTop)}<p class="${CL.note}">Larger horizontal values move the avatar left; positive vertical values move it down.</p><div class="${CL.actions}"><button id="wda4-layout-save">Save avatar layout</button><button id="wda4-layout-reset">Reset avatar layout</button></div></section>
-<div class="${CL.profile}">Current profile: <strong>${esc(title)}</strong>${profile.isProject ? `<br><small>${esc(profile.key)}</small>` : ''}</div><p class="${CL.note}">${profile.isProject ? 'Missing Project expressions use the default pack.' : 'This pack is the fallback outside and inside Projects.'} V4.4.2 supports standalone and inline markers, including markers split across nested streaming DOM nodes. Image quality up to 1536px remains preserved.</p><div class="${CL.grid}">${cards}</div><div class="${CL.actions}"><label>${esc(importLabel)}<input id="wda4-import" type="file" accept="image/*" multiple></label><button id="wda4-clear-profile" class="${CL.danger}">${esc(clearLabel)}</button><button id="wda4-clear-all" class="${CL.danger}">Clear ALL avatar packs</button><button id="wda4-close">Close</button></div><p>Assistant marker format:</p><div class="${CL.code}">${CFG.expressions.map(expression => `[[avatar:${expression}]]`).join('\n')}</div><p class="${CL.note}">Markers may appear several times in one reply. Inline markers such as “Done. [[avatar:smile]]” switch immediately and only the marker text is hidden.</p>`;
+<div class="${CL.profile}">Current profile: <strong>${esc(title)}</strong>${profile.isProject ? `<br><small>${esc(profile.key)}</small>` : ''}</div><p class="${CL.note}">${profile.isProject ? 'Missing Project expressions use the default pack.' : 'This pack is the fallback outside and inside Projects.'} WhiteDragon detects markers even when ChatGPT splits one visible marker line across several streaming DOM nodes, and inline markers are stripped without deleting the surrounding text. Image quality up to 1536px remains preserved.</p><div class="${CL.grid}">${cards}</div>
+<div class="${CL.actions}">
+<label>${esc(importLabel)}<input id="wda4-import" type="file" accept="image/*" multiple></label>
+<button id="wda4-copy-avatar-prompt">Copy avatar generation prompt</button>
+<button id="wda4-clear-profile" class="${CL.danger}">${esc(clearLabel)}</button>
+<button id="wda4-clear-all" class="${CL.danger}">Clear ALL avatar packs</button>
+<button id="wda4-close">Close</button>
+</div>
+<p class="${CL.note}">Need an avatar set? Copy the generation prompt and use it with your own character reference image to create the 10 WhiteDragon expressions.</p>
+<p>Assistant marker format:</p><div class="${CL.code}">${CFG.expressions.map(expression => `[[avatar:${expression}]]`).join('\n')}</div><p class="${CL.note}">Markers may appear several times in one reply. Each completed marker switches immediately during streaming, even when the renderer splits the marker across nested spans/text nodes.</p>`;
 
             UI.drag(panel);
 
@@ -1196,7 +1216,25 @@
                 const button = event.target.closest('button');
                 if (!button) return;
                 try {
-                    if (button.id === 'wda4-brand-save') {
+                    if (button.id === 'wda4-copy-ai-instructions') {
+                        await UI.copyText(
+                            AI_SETUP.instructions,
+                            button,
+                            'Instructions copied ✓'
+                        );
+                    } else if (button.id === 'wda4-copy-test-prompt') {
+                        await UI.copyText(
+                            AI_SETUP.testPrompt,
+                            button,
+                            'Test prompt copied ✓'
+                        );
+                    } else if (button.id === 'wda4-copy-avatar-prompt') {
+                        await UI.copyText(
+                            AI_SETUP.avatarGenerationPrompt,
+                            button,
+                            'Avatar prompt copied ✓'
+                        );
+                    } else if (button.id === 'wda4-brand-save') {
                         const saved = Brand.save({
                             name: $('#wda4-brand-name', panel).value,
                             fontFamily: $('#wda4-brand-font', panel).value,
