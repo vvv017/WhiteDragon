@@ -1,3 +1,75 @@
+            Brand.value = Brand.normalize(readJson(CFG.brandingKey));
+            Brand.previous = Brand.value.name;
+            S.brandNames.add(Brand.value.name);
+            return Brand.value;
+        },
+
+        get() { return Brand.value || Brand.load(); },
+
+        save(input) {
+            const oldName = Brand.get().name;
+            Brand.previous = oldName;
+            Brand.value = Brand.normalize(input);
+            S.brandNames.add(oldName);
+            S.brandNames.add(Brand.value.name);
+            localStorage.setItem(CFG.brandingKey, JSON.stringify(Brand.value));
+            Brand.apply();
+            return Brand.value;
+        },
+
+        reset() { return Brand.save(Brand.defaults); },
+
+        names() {
+            return uniq(['ChatGPT', Brand.previous, Brand.get().name, ...S.brandNames])
+                .filter(Boolean).sort((a, b) => b.length - a.length);
+        },
+
+        match(value) {
+            const valueText = txt(value);
+            for (const name of Brand.names()) {
+                if (valueText === name) return { name, suffix: '' };
+                if (!valueText.startsWith(`${name} `)) continue;
+                const suffix = valueText.slice(name.length).trim();
+                if (/^(Pro|Plus|Team|Business|Enterprise|Free)$/i.test(suffix)) return { name, suffix };
+            }
+            return null;
+        },
+
+        titleCandidate(node, preferred = false) {
+            const parent = node?.parentElement;
+            const match = Brand.match(node?.nodeValue);
+            if (!parent || !match || parent.closest(`#${ID.modal}, ${SEL.messages}, form, textarea, input`)) return null;
+
+            const rect = parent.getBoundingClientRect();
+            if (!validRect(rect) || rect.bottom <= 0 || rect.top < -16 || rect.top > 130 || rect.width > 360 || rect.height > 80) return null;
+
+            const container = parent.closest('button, [role="button"], a, header, [role="banner"]') || parent;
+            const containerText = txt(container.innerText || container.textContent);
+            if (!containerText || containerText.length > 90) return null;
+
+            const plan = /\b(Pro|Plus|Team|Business|Enterprise|Free)\b/i.test(containerText);
+            const model = Boolean(
+                container.matches?.('[data-testid*="model"], [aria-label*="model" i]') ||
+                container.querySelector?.('[data-testid*="model"], [aria-label*="model" i]')
+            );
+            const sidebar = Boolean(parent.closest('aside, [data-testid*="sidebar"]'));
+            const score = rect.top * 3 + Math.min(rect.left, 1400) / 12
+                - (preferred ? 2200 : 0) - (model ? 2600 : 0) - (plan ? 1800 : 0) + (sidebar ? 600 : 0);
+            return { node, parent, match, score };
+        },
+
+        findTitle() {
+            const found = [];
+            const seen = new Set();
+            const preferred = $$([
+                'button[data-testid*="model"]', '[role="button"][data-testid*="model"]',
+                'button[aria-label*="model" i]', 'header button', 'header [role="button"]',
+                '[role="banner"] button', '[role="banner"] [role="button"]'
+            ].join(','));
+
+            for (const root of preferred) {
+                for (const node of textNodes(root)) {
+                    if (seen.has(node)) continue;
                     seen.add(node);
                     const candidate = Brand.titleCandidate(node, true);
                     if (candidate) found.push(candidate);
@@ -33,288 +105,3 @@
         applyTitle() {
             let live = false;
             for (const element of $$('[data-wda4-title="1"]')) {
-                const rect = element.getBoundingClientRect();
-                if (!document.contains(element) || !validRect(rect) || rect.bottom <= 0 || rect.top >= 130) continue;
-                const node = textNodes(element).find(item => Brand.match(item.nodeValue));
-                if (node) Brand.replaceNode(node, Brand.match(node.nodeValue));
-                Brand.styleTitle(element);
-                live = true;
-            }
-            if (live) return;
-            const target = Brand.findTitle();
-            if (!target) return;
-            Brand.replaceNode(target.node, target.match);
-            Brand.styleTitle(target.parent);
-        },
-
-        prompt() { return `Ask ${Brand.get().name}`; },
-
-        editors() {
-            return uniq($$([
-                '#prompt-textarea', 'textarea[placeholder]', 'input[placeholder]',
-                '[contenteditable="true"][data-placeholder]', '[contenteditable="true"][aria-label]'
-            ].join(','))).filter(element => !element.closest(`#${ID.modal}, ${SEL.messages}`));
-        },
-
-        isEditor(element) {
-            if (element.id === 'prompt-textarea' || element.dataset.wda4Prompt === '1') return true;
-            return ['placeholder', 'data-placeholder', 'aria-label']
-                .map(attribute => element.getAttribute(attribute)).filter(Boolean)
-                .some(value => /\bChatGPT\b/i.test(value) || /^(Ask|Message)\s+/i.test(value));
-        },
-
-        applyComposer() {
-            const roots = new Set();
-            for (const editor of Brand.editors()) {
-                if (!Brand.isEditor(editor)) continue;
-                editor.dataset.wda4Prompt = '1';
-                for (const attribute of ['placeholder', 'data-placeholder', 'aria-label']) {
-                    if (editor.hasAttribute(attribute) || editor.id === 'prompt-textarea') {
-                        editor.setAttribute(attribute, Brand.prompt());
-                    }
-                }
-                roots.add(editor.closest('form') || editor.parentElement?.parentElement?.parentElement || editor.parentElement);
-            }
-
-            const known = new Set(Brand.names().flatMap(name => [`Ask ${name}`, `Message ${name}`]));
-            for (const root of roots) {
-                if (!root) continue;
-                for (const node of textNodes(root)) {
-                    const value = txt(node.nodeValue);
-                    if (!known.has(value)) continue;
-                    const raw = String(node.nodeValue || '');
-                    node.nodeValue = `${raw.match(/^\s*/)?.[0] || ''}${Brand.prompt()}${raw.match(/\s*$/)?.[0] || ''}`;
-                }
-            }
-        },
-
-        apply() { Brand.applyTitle(); Brand.applyComposer(); }
-    };
-
-    // ------------------------------------------------------------------
-    // Avatar layout
-    // ------------------------------------------------------------------
-
-    const Layout = {
-        saved: null,
-        previewValue: null,
-
-        normalize(input = {}) {
-            const number = (key, min, max) => {
-                const parsed = Number(input[key]);
-                const fallback = CFG.defaultLayout[key];
-                return clamp(Number.isFinite(parsed) ? Math.round(parsed) : fallback, min, max);
-            };
-            return {
-                size: number('size', 32, 128),
-                gap: number('gap', -40, 100),
-                topOffset: number('topOffset', -80, 120),
-                stickyTop: number('stickyTop', 0, 240)
-            };
-        },
-
-        load() {
-            Layout.saved = Layout.normalize(readJson(CFG.layoutKey));
-            Layout.previewValue = null;
-            Layout.applyVars(Layout.saved);
-            return Layout.saved;
-        },
-
-        get() { return Layout.previewValue || Layout.saved || Layout.load(); },
-
-        applyVars(value = Layout.get()) {
-            document.documentElement.style.setProperty('--wda4-size', `${value.size}px`);
-            document.documentElement.style.setProperty('--wda4-sticky', `${value.stickyTop}px`);
-        },
-
-        preview(input) {
-            Layout.previewValue = Layout.normalize(input);
-            Layout.applyVars(Layout.previewValue);
-            return Layout.previewValue;
-        },
-
-        save(input) {
-            Layout.saved = Layout.normalize(input);
-            Layout.previewValue = null;
-            localStorage.setItem(CFG.layoutKey, JSON.stringify(Layout.saved));
-            Layout.applyVars(Layout.saved);
-            App.refresh();
-            return Layout.saved;
-        },
-
-        reset() { return Layout.save(CFG.defaultLayout); }
-    };
-
-    // ------------------------------------------------------------------
-    // IndexedDB and image packs
-    // ------------------------------------------------------------------
-
-    const DB = {
-        promise: null,
-
-        open() {
-            if (DB.promise) return DB.promise;
-            DB.promise = new Promise((resolve, reject) => {
-                const request = indexedDB.open(CFG.dbName, CFG.dbVersion);
-                request.onupgradeneeded = () => {
-                    if (!request.result.objectStoreNames.contains(CFG.storeName)) {
-                        request.result.createObjectStore(CFG.storeName);
-                    }
-                };
-                request.onsuccess = () => {
-                    request.result.onversionchange = () => {
-                        request.result.close();
-                        DB.promise = null;
-                    };
-                    resolve(request.result);
-                };
-                request.onerror = () => { DB.promise = null; reject(request.error); };
-            });
-            return DB.promise;
-        },
-
-        async run(mode, work) {
-            const db = await DB.open();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction(CFG.storeName, mode);
-                let result;
-                try { result = work(transaction.objectStore(CFG.storeName)); }
-                catch (error) { transaction.abort(); reject(error); return; }
-                transaction.oncomplete = () => resolve(result);
-                transaction.onerror = () => reject(transaction.error);
-                transaction.onabort = () => reject(transaction.error || new Error('IndexedDB transaction aborted.'));
-            });
-        },
-
-        read(keys) {
-            return DB.run('readonly', store => {
-                const output = new Map();
-                for (const key of keys) {
-                    const request = store.get(key);
-                    request.onsuccess = () => output.set(key, request.result ?? null);
-                }
-                return output;
-            });
-        },
-        put(entries) { return DB.run('readwrite', store => entries.forEach(([key, value]) => store.put(value, key))); },
-        remove(keys) { return DB.run('readwrite', store => keys.forEach(key => store.delete(key))); },
-        clear() { return DB.run('readwrite', store => store.clear()); }
-    };
-
-    const ImageTools = {
-        placeholder(expression) {
-            const label = esc(expression.slice(0, 2).toUpperCase());
-            const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f7f2ff"/><stop offset="1" stop-color="#ddd0ff"/></linearGradient></defs><circle cx="48" cy="48" r="46" fill="url(#g)" stroke="#b6a2e8" stroke-width="2"/><text x="48" y="56" text-anchor="middle" font-size="24" fill="#644ea8" font-family="Arial">${label}</text></svg>`;
-            return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
-        },
-
-        readDataUrl(file) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve(String(reader.result));
-                reader.onerror = () => reject(
-                    reader.error || new Error(`Could not read ${file.name}`)
-                );
-                reader.readAsDataURL(file);
-            });
-        },
-
-        async optimize(file) {
-            const url = URL.createObjectURL(file);
-            const image = new Image();
-
-            try {
-                await new Promise((resolve, reject) => {
-                    image.onload = resolve;
-                    image.onerror = () => reject(
-                        new Error(`Could not load ${file.name}`)
-                    );
-                    image.src = url;
-                });
-            } finally {
-                URL.revokeObjectURL(url);
-            }
-
-            const width = image.naturalWidth || image.width;
-            const height = image.naturalHeight || image.height;
-            const longestSide = Math.max(width, height);
-
-            // Preserve the user's original bytes whenever the image is already
-            // a reasonable size. This avoids the old 256px WebP re-encoding
-            // and keeps transparency/detail intact.
-            if (longestSide <= CFG.importSize) {
-                return ImageTools.readDataUrl(file);
-            }
-
-            // Only unusually large images are resized, using a high-quality
-            // lossless PNG output.
-            const scale = CFG.importSize / longestSide;
-            const drawWidth = Math.max(1, Math.round(width * scale));
-            const drawHeight = Math.max(1, Math.round(height * scale));
-
-            const canvas = document.createElement('canvas');
-            canvas.width = drawWidth;
-            canvas.height = drawHeight;
-
-            const ctx = canvas.getContext('2d', { alpha: true });
-            if (!ctx) {
-                throw new Error('Could not create a canvas context.');
-            }
-
-            ctx.imageSmoothingEnabled = true;
-            ctx.imageSmoothingQuality = 'high';
-            ctx.clearRect(0, 0, drawWidth, drawHeight);
-            ctx.drawImage(image, 0, 0, drawWidth, drawHeight);
-
-            return canvas.toDataURL('image/png');
-        }
-    };
-
-    const Profiles = {
-        current() {
-            const match = location.pathname.match(/\/g\/(g-p-([0-9a-f]+)(?:-[^/]+)?)(?:\/|$)/i);
-            if (!match) return { key: CFG.defaultProfile, routeId: null, label: 'Default / outside Projects', isProject: false };
-            return {
-                key: `g-p-${match[2].toLowerCase()}`,
-                routeId: match[1],
-                label: Profiles.label(match[1]),
-                isProject: true
-            };
-        },
-
-        label(routeId) {
-            try {
-                for (const link of $$(`a[href*="/g/${routeId}/project"], a[href*="/g/${routeId}/"]`)) {
-                    const value = txt(link.innerText || link.textContent);
-                    if (value.length >= 2 && value.length <= 120) return value;
-                }
-            } catch (_) {}
-            const slug = routeId.match(/^g-p-[0-9a-f]+-(.+)$/i)?.[1];
-            if (!slug) return 'ChatGPT Project';
-            try { return decodeURIComponent(slug).replace(/[-_]+/g, ' ').trim() || 'ChatGPT Project'; }
-            catch (_) { return slug.replace(/[-_]+/g, ' ').trim() || 'ChatGPT Project'; }
-        },
-
-        key(profileKey, expression) {
-            return profileKey === CFG.defaultProfile ? expression : `project-avatar::${profileKey}::${expression}`;
-        },
-
-        pack(profileKey) {
-            if (profileKey === CFG.defaultProfile) return S.defaultPack;
-            if (!S.projectPacks.has(profileKey)) S.projectPacks.set(profileKey, new Map());
-            return S.projectPacks.get(profileKey);
-        },
-
-        own(profileKey, expression) { return Profiles.pack(profileKey).get(expression) || null; },
-        source(profileKey, expression) {
-            return Profiles.own(profileKey, expression) || S.defaultPack.get(expression) || ImageTools.placeholder(expression);
-        },
-
-        async load(profile) {
-            if (S.loaded.has(profile.key)) return false;
-            if (S.loading.has(profile.key)) return S.loading.get(profile.key);
-
-            const promise = (async () => {
-                const keys = CFG.expressions.map(expression => Profiles.key(profile.key, expression));
-                const values = await DB.read(keys);
-                const pack = Profiles.pack(profile.key);
