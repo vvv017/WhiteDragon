@@ -80,17 +80,99 @@
                 : 'neutral';
         },
 
-        hide(root) {
-            for (const element of $$('p, div, span', root)) {
-                if (element.closest('pre, code')) continue;
+        /*
+         * Remove avatar markers without deleting the surrounding paragraph.
+         * This also works when ChatGPT splits one marker across several
+         * nested span/text nodes.
+         */
+        strip(element) {
+            if (!element || element.closest('pre, code')) return false;
 
+            const nodes = textNodes(element).filter(node =>
+                !node.parentElement?.closest('pre, code')
+            );
+
+            if (!nodes.length) return false;
+
+            const spans = [];
+            let source = '';
+
+            for (const node of nodes) {
+                const value = String(node.nodeValue || '');
+                spans.push({
+                    node,
+                    start: source.length,
+                    end: source.length + value.length
+                });
+                source += value;
+            }
+
+            Expression.marker.lastIndex = 0;
+            const matches = [];
+            let match;
+
+            while ((match = Expression.marker.exec(source)) !== null) {
+                const candidate = match[1].toLowerCase();
+
+                if (CFG.expressions.includes(candidate)) {
+                    matches.push({
+                        start: match.index,
+                        end: match.index + match[0].length
+                    });
+                }
+            }
+
+            Expression.marker.lastIndex = 0;
+            if (!matches.length) return false;
+
+            // Work from the end so earlier offsets remain valid.
+            for (const range of matches.reverse()) {
+                for (const span of spans) {
+                    if (
+                        span.end <= range.start ||
+                        span.start >= range.end
+                    ) {
+                        continue;
+                    }
+
+                    const value = String(span.node.nodeValue || '');
+                    const localStart = Math.max(
+                        0,
+                        range.start - span.start
+                    );
+                    const localEnd = Math.min(
+                        value.length,
+                        range.end - span.start
+                    );
+
+                    span.node.nodeValue =
+                        value.slice(0, localStart) +
+                        value.slice(localEnd);
+                }
+            }
+
+            if (!txt(element.textContent || '')) {
+                element.style.display = 'none';
+            }
+
+            element.dataset.wda4Marker = 'hidden';
+            return true;
+        },
+
+        hide(root) {
+            if (!root) return;
+
+            const blocks = $$(
+                'p, li, blockquote, h1, h2, h3, h4, h5, h6',
+                root
+            );
+
+            for (const block of blocks) {
                 if (
-                    Expression.exact.test(
-                        String(element.textContent || '').trim()
-                    )
+                    !block.closest('pre, code') &&
+                    String(block.textContent || '').includes('[[avatar:')
                 ) {
-                    element.style.display = 'none';
-                    element.dataset.wda4Marker = 'hidden';
+                    Expression.strip(block);
                 }
             }
         }
