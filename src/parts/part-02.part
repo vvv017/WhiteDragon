@@ -1,343 +1,107 @@
-                CFG.expressions.forEach(expression => {
-                    const value = values.get(Profiles.key(profile.key, expression));
-                    if (value) pack.set(expression, value);
-                });
-                S.loaded.add(profile.key);
-                return true;
-            })();
-
-            S.loading.set(profile.key, promise);
-            try { return await promise; }
-            finally { S.loading.delete(profile.key); }
-        },
-
-        requestCurrent() {
-            const profile = Profiles.current();
-            if (S.loaded.has(profile.key) || S.loading.has(profile.key)) return;
-            Profiles.load(profile).then(loaded => {
-                if (!loaded) return;
-                App.schedule(0);
-                if ($(`#${ID.modal}`)) UI.render();
-            }).catch(error => console.warn('[WhiteDragon] Profile load failed:', error));
-        },
-
-        async import(files, profile) {
-            const valid = [], ignored = [], failed = [];
-            for (const file of files) {
-                const index = file.name.lastIndexOf('.');
-                const expression = (index >= 0 ? file.name.slice(0, index) : file.name).trim().toLowerCase();
-                if (!CFG.expressions.includes(expression)) { ignored.push(file.name); continue; }
-                try { valid.push([expression, await ImageTools.optimize(file)]); }
-                catch (error) { console.error(error); failed.push(file.name); }
-            }
-
-            if (valid.length) {
-                await DB.put(valid.map(([expression, value]) => [Profiles.key(profile.key, expression), value]));
-                const pack = Profiles.pack(profile.key);
-                valid.forEach(([expression, value]) => pack.set(expression, value));
-                S.loaded.add(profile.key);
-            }
-
-            App.refresh();
-            await UI.render();
-            let message = `Imported ${valid.length} avatar file(s) into:\n${profile.label}`;
-            if (ignored.length) message += `\nIgnored: ${ignored.join(', ')}`;
-            if (failed.length) message += `\nFailed: ${failed.join(', ')}`;
-            alert(message);
-        },
-
-        async clear(profile) {
-            await DB.remove(CFG.expressions.map(expression => Profiles.key(profile.key, expression)));
-            Profiles.pack(profile.key).clear();
-            S.loaded.add(profile.key);
-            App.refresh();
-            await UI.render();
-        },
-
-        async clearAll() {
-            await DB.clear();
-            S.defaultPack.clear();
-            S.projectPacks.clear();
-            S.loaded.clear();
-            S.loading.clear();
-            App.refresh();
-            await UI.render();
-        }
-    };
-
-    // ------------------------------------------------------------------
-    // Expressions and ChatGPT DOM
-    // ------------------------------------------------------------------
-
-    const Expression = {
-        marker: /\[\[avatar:([a-zA-Z0-9_-]+)\]\]/g,
-        exact: /^\[\[avatar:[a-zA-Z0-9_-]+\]\]$/,
-        rules: [
-            ['sad', /抱歉|可惜|遺憾|遗憾|難過|难过|unfortunately|sorry|regret/i],
-            ['laugh', /哈哈|笑死|www|lol|lmao|xd|😂|🤣/i],
-            ['surprised', /驚|惊|真的假的|居然|竟然|哇|wow|what\?!|unexpected/i],
-            ['confused', /蛤|啥|什麼|什么|不懂|看不懂|huh|\?{2,}/i],
-            ['thinking', /想一下|想想|思考|分析一下|let me think|hmm|thinking/i],
-            ['annoyed', /吐槽|嫌棄|嫌弃|離譜|离谱|無語|无语|annoy|seriously\?/i],
-            ['smug', /得意|哼哼|這不就|这不就|輕鬆|轻松|ez|smug/i],
-            ['smile', /好耶|太好了|沒問題|没问题|可以呀|nice|great|awesome|happy/i]
-        ],
-
-        /*
-         * Return the newest valid marker currently present in the reply.
-         *
-         * The message DOM is scanned in text-node order, including markers
-         * that were visually hidden earlier. Code/pre blocks are ignored so
-         * a marker shown as an example does not change the real avatar.
-         */
-        latest(root, fallbackText = '') {
-            let source = String(fallbackText || '');
-
-            if (root) {
-                const parts = [];
-                const walker = document.createTreeWalker(
-                    root,
-                    NodeFilter.SHOW_TEXT,
-                    {
-                        acceptNode(node) {
-                            const parent = node.parentElement;
-
-                            return parent?.closest('pre, code')
-                                ? NodeFilter.FILTER_REJECT
-                                : NodeFilter.FILTER_ACCEPT;
-                        }
-                    }
-                );
-
-                while (walker.nextNode()) {
-                    parts.push(walker.currentNode.nodeValue || '');
-                }
-
-                source = parts.join('\n');
-            }
-
-            let latest = null;
-            let match;
-
-            Expression.marker.lastIndex = 0;
-
-            while ((match = Expression.marker.exec(source)) !== null) {
-                const candidate = match[1].toLowerCase();
-
-                if (CFG.expressions.includes(candidate)) {
-                    latest = candidate;
-                }
-            }
-
-            Expression.marker.lastIndex = 0;
-            return latest;
-        },
-
-        infer(text, message, turn) {
-            const marker = Expression.latest(message || turn, text);
-
-            if (CFG.expressions.includes(marker)) {
-                // Every newly-streamed marker replaces the previous one.
-                turn.dataset.wda4Expression = marker;
-                return marker;
-            }
-
-            const remembered = turn.dataset.wda4Expression;
-            if (CFG.expressions.includes(remembered)) return remembered;
-            if (!message) return 'thinking';
-
-            for (const [expression, pattern] of Expression.rules) {
-                if (pattern.test(text)) return expression;
-            }
-
-            return message.querySelector('pre, code') ||
-                message.querySelectorAll('li').length >= 3 ||
-                /首先|其次|結論|结论|總結|总结|步驟|步骤|分析|建議|建议/i.test(text)
-                ? 'serious'
-                : 'neutral';
-        },
-
-        hide(root) {
-            for (const element of $$('p, div, span', root)) {
-                if (element.closest('pre, code')) continue;
-
-                if (
-                    Expression.exact.test(
-                        String(element.textContent || '').trim()
-                    )
-                ) {
-                    element.style.display = 'none';
-                    element.dataset.wda4Marker = 'hidden';
-                }
-            }
-        }
-    };
-
-    const Chat = {
-        turns() {
-            const fallback = $$(SEL.messages).map(message =>
-                message.closest('article') || message.closest('[data-testid*="conversation-turn"]') || message.parentElement
-            ).filter(Boolean);
-            return uniq([...$$(SEL.turns), ...fallback]);
-        },
-
-        message(turn) { return $(SEL.assistant, turn); },
-
-        isAssistant(turn) {
-            if ($(SEL.user, turn)) return false;
-            if (Chat.message(turn)) return true;
-            const value = txt(turn.innerText || turn.textContent);
-            return Boolean(value && value.length <= 800);
-        },
-
-        statusAnchor(turn) {
-            const turnRect = turn.getBoundingClientRect();
-            let nodes = $$('[aria-live], p, span, button, [role="button"]', turn);
-            if (!nodes.length) nodes = $$('div', turn);
-            const candidates = [];
-
-            for (const element of nodes) {
-                if (element.closest(`.${CL.rail}`)) continue;
-                const value = txt(element.innerText || element.textContent);
-                if (!value || value.length > 220) continue;
                 const rect = element.getBoundingClientRect();
-                if (!validRect(rect) || (turnRect.width && rect.width > turnRect.width * 0.92)) continue;
-
-                const left = rect.left - turnRect.left;
-                const top = rect.top - turnRect.top;
-                const control = element.matches('button, [role="button"]');
-                const action = /^(answer now|skip|stop|cancel|continue|respond now)$/i.test(value);
-                const right = turnRect.width > 0 && left > turnRect.width * 0.62;
-                candidates.push({ element, rect, left, top, control, action, right });
+                if (!document.contains(element) || !validRect(rect) || rect.bottom <= 0 || rect.top >= 130) continue;
+                const node = textNodes(element).find(item => Brand.match(item.nodeValue));
+                if (node) Brand.replaceNode(node, Brand.match(node.nodeValue));
+                Brand.styleTitle(element);
+                live = true;
             }
-
-            if (!candidates.length) return null;
-            const preferred = candidates.filter(item => !item.control && !item.action && !item.right);
-            const leftSide = candidates.filter(item => !item.right);
-            const pool = preferred.length ? preferred : (leftSide.length ? leftSide : candidates);
-            return pool.sort((a, b) => {
-                const score = item => Math.max(0, item.left) * 3 + Math.abs(item.top) +
-                    Math.min(1800, item.rect.width * item.rect.height / 900) +
-                    (item.control ? 4000 : 0) + (item.action ? 8000 : 0) + (item.right ? 6000 : 0);
-                return score(a) - score(b);
-            })[0].element;
+            if (live) return;
+            const target = Brand.findTitle();
+            if (!target) return;
+            Brand.replaceNode(target.node, target.match);
+            Brand.styleTitle(target.parent);
         },
 
-        anchor(turn, message) { return message || Chat.statusAnchor(turn); },
-
-        messageFromNode(node) {
-            const element = node?.nodeType === Node.TEXT_NODE
-                ? node.parentElement
-                : node;
-
-            if (!element) return null;
-
-            if (element.matches?.(SEL.assistant)) {
-                return element;
-            }
-
-            return element.closest?.(SEL.assistant) || null;
-        },
-
-        turnFromMessage(message) {
-            return message?.closest(SEL.turns) ||
-                message?.closest('article') ||
-                message?.closest('[data-testid*="conversation-turn"]') ||
-                message?.parentElement ||
-                null;
-        },
-
-        turnFromNode(node) {
-            const element = node?.nodeType === Node.TEXT_NODE
-                ? node.parentElement
-                : node;
-
-            if (!element) return null;
-
-            return element.closest?.(SEL.turns) ||
-                element.closest?.('article') ||
-                element.closest?.('[data-testid*="conversation-turn"]') ||
-                Chat.turnFromMessage(Chat.messageFromNode(node)) ||
-                null;
-        }
+        apply() { Brand.applyTitle(); }
     };
 
     // ------------------------------------------------------------------
-    // Avatar placement and one-avatar visibility
+    // Avatar layout
     // ------------------------------------------------------------------
 
-    const Avatar = {
-        ensure(turn) {
-            turn.classList.add(CL.turn);
-            let rail = $(`:scope > .${CL.rail}`, turn);
-            if (!rail) {
-                rail = document.createElement('div');
-                rail.className = CL.rail;
-                turn.prepend(rail);
-            }
-            let image = $(`:scope > .${CL.avatar}`, rail);
-            if (!image) {
-                image = document.createElement('img');
-                image.className = CL.avatar;
-                image.alt = '';
-                image.draggable = false;
-                rail.appendChild(image);
-            }
-            return { rail, image };
+    const Layout = {
+        saved: null,
+        previewValue: null,
+
+        normalize(input = {}) {
+            const number = (key, min, max) => {
+                const parsed = Number(input[key]);
+                const fallback = CFG.defaultLayout[key];
+                return clamp(Number.isFinite(parsed) ? Math.round(parsed) : fallback, min, max);
+            };
+            return {
+                size: number('size', 32, 128),
+                gap: number('gap', -40, 100),
+                topOffset: number('topOffset', -80, 120),
+                stickyTop: number('stickyTop', 0, 240)
+            };
         },
 
-        source(parts, profile, expression) {
-            const value = Profiles.source(profile.key, expression);
-            const image = parts.image;
-            if (image.dataset.expression === expression && image.dataset.profile === profile.key && image.getAttribute('src') === value) return;
-            image.classList.add(CL.changing);
-            image.src = value;
-            image.dataset.expression = expression;
-            image.dataset.profile = profile.key;
-            requestAnimationFrame(() => image.classList.remove(CL.changing));
+        load() {
+            Layout.saved = Layout.normalize(readJson(CFG.layoutKey));
+            Layout.previewValue = null;
+            Layout.applyVars(Layout.saved);
+            return Layout.saved;
         },
 
-        position(turn, parts, anchor) {
-            if (!anchor) { parts.rail.style.display = 'none'; return; }
-            const turnRect = turn.getBoundingClientRect();
-            const anchorRect = anchor.getBoundingClientRect();
-            if (!validRect(turnRect) || !validRect(anchorRect)) { parts.rail.style.display = 'none'; return; }
+        get() { return Layout.previewValue || Layout.saved || Layout.load(); },
 
-            const layout = Layout.get();
-            let left = anchorRect.left - turnRect.left - layout.size - layout.gap;
-            let top = anchorRect.top - turnRect.top + layout.topOffset;
-            if (turnRect.left + left < 6) {
-                left = Math.max(6 - turnRect.left, anchorRect.left - turnRect.left);
-                top = Math.max(0, anchorRect.top - turnRect.top);
-            }
-            Object.assign(parts.rail.style, { display: '', left: `${Math.round(left)}px`, top: `${Math.round(top)}px` });
+        applyVars(value = Layout.get()) {
+            document.documentElement.style.setProperty('--wda4-size', `${value.size}px`);
+            document.documentElement.style.setProperty('--wda4-sticky', `${value.stickyTop}px`);
         },
 
-        remove(turn) {
-            $(`:scope > .${CL.rail}`, turn)?.remove();
-            turn.classList.remove(CL.turn, CL.active);
-            S.visible.delete(turn);
+        preview(input) {
+            Layout.previewValue = Layout.normalize(input);
+            Layout.applyVars(Layout.previewValue);
+            return Layout.previewValue;
         },
 
-        process(turn, profile) {
-            if (!Chat.isAssistant(turn)) { Avatar.remove(turn); return; }
-            const message = Chat.message(turn);
-            const content = message?.textContent || turn.textContent || '';
-            const expression = Expression.infer(content, message, turn);
-            const parts = Avatar.ensure(turn);
-            Avatar.source(parts, profile, expression);
-            Avatar.position(turn, parts, Chat.anchor(turn, message));
-            if (message) Expression.hide(message);
-        }
+        save(input) {
+            Layout.saved = Layout.normalize(input);
+            Layout.previewValue = null;
+            localStorage.setItem(CFG.layoutKey, JSON.stringify(Layout.saved));
+            Layout.applyVars(Layout.saved);
+            App.refresh();
+            return Layout.saved;
+        },
+
+        reset() { return Layout.save(CFG.defaultLayout); }
     };
 
-    const Visibility = {
-        active(turn) {
-            if (S.activeTurn === turn) return;
-            S.activeTurn?.classList.remove(CL.active);
-            S.activeTurn = turn || null;
-            S.activeTurn?.classList.add(CL.active);
+    // ------------------------------------------------------------------
+    // IndexedDB and image packs
+    // ------------------------------------------------------------------
+
+    const DB = {
+        promise: null,
+
+        open() {
+            if (DB.promise) return DB.promise;
+            DB.promise = new Promise((resolve, reject) => {
+                const request = indexedDB.open(CFG.dbName, CFG.dbVersion);
+                request.onupgradeneeded = () => {
+                    if (!request.result.objectStoreNames.contains(CFG.storeName)) {
+                        request.result.createObjectStore(CFG.storeName);
+                    }
+                };
+                request.onsuccess = () => {
+                    request.result.onversionchange = () => {
+                        request.result.close();
+                        DB.promise = null;
+                    };
+                    resolve(request.result);
+                };
+                request.onerror = () => { DB.promise = null; reject(request.error); };
+            });
+            return DB.promise;
         },
 
-        choose(turns = Chat.turns()) {
-            let chosen = null;
+        async run(mode, work) {
+            const db = await DB.open();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(CFG.storeName, mode);
+                let result;
+                try { result = work(transaction.objectStore(CFG.storeName)); }
+                catch (error) { transaction.abort(); reject(error); return; }
+                transaction.oncomplete = () => resolve(result);
