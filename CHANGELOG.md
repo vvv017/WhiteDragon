@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.5.1
+
+### Fixed
+
+- Tighten the copied WhiteDragon expression instructions so the marker syntax must remain exactly `[[avatar:expression]]`.
+- Make the test prompt use the exact markers `[[avatar:neutral]]`, `[[avatar:thinking]]`, `[[avatar:surprised]]`, `[[avatar:smile]]`, and `[[avatar:laugh]]`.
+- Explicitly reject variants such as `[WhiteDragon:neutral]`, `[avatar:neutral]`, translated labels, abbreviations, or other substituted marker formats.
+
 ## 4.5.0
 
 ### Added
