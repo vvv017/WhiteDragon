@@ -1,0 +1,107 @@
+                }
+            };
+
+            brandPreview();
+            layoutLabels(layout);
+        }
+    };
+
+    // ------------------------------------------------------------------
+    // Lifecycle
+    // ------------------------------------------------------------------
+
+    const App = {
+        cleanup() {
+            try { localStorage.removeItem('chatgpt_white_dragon_avatar_pack_v1'); } catch (_) {}
+            $$([
+                '.white-dragon-avatar', '.white-dragon-avatar-v2', '.white-dragon-avatar-v21',
+                '.white-dragon-avatar-v22', '.white-dragon-avatar-v23', '.white-dragon-avatar-rail-v23',
+                '.wda3-rail', '.wda3-avatar'
+            ].join(',')).forEach(element => element.remove());
+            $$('.white-dragon-turn-anchor, .white-dragon-active-turn, .wda3-turn, .wda3-active')
+                .forEach(element => element.classList.remove('white-dragon-turn-anchor','white-dragon-active-turn','wda3-turn','wda3-active'));
+            $$('style[id^="white-dragon-avatar-"], #wda3-style').forEach(element => element.remove());
+            ['white-dragon-avatar-overlay-layer','white-dragon-avatar-config-button','white-dragon-avatar-modal','wda3-config-button','wda3-modal']
+                .forEach(id => document.getElementById(id)?.remove());
+        },
+
+        refresh() {
+            UI.button();
+            Brand.apply();
+            Profiles.requestCurrent();
+            const profile = Profiles.current();
+            const turns = Chat.turns();
+            turns.forEach(turn => Avatar.process(turn, profile));
+            Visibility.sync(turns);
+        },
+
+        /*
+         * Fast path for expression markers during streaming.
+         *
+         * The normal page refresh is deliberately debounced so ChatGPT can
+         * stream lots of tokens without making the userscript expensive.
+         * That also meant V4.2 did not run until streaming paused/finished,
+         * so several marker lines appeared first and only the final marker
+         * became visible afterward.
+         *
+         * V4.3 watches only mutations that actually contain "[[avatar:".
+         * When one appears, just that assistant turn is updated immediately.
+         * Ordinary streaming tokens still use the cheap debounced path.
+         */
+        streamMarkers(mutations) {
+            const profile = Profiles.current();
+            const updates = new Map();
+
+            /*
+             * ChatGPT's markdown renderer does not always stream a marker as
+             * one text node. For example, the visible line
+             *
+             *   [[avatar:smile]]
+             *
+             * can temporarily be split across several text/span nodes. V4.3
+             * checked only the mutated node for the literal "[[avatar:" and
+             * therefore missed those cases.
+             *
+             * V4.4 instead climbs from every mutation to its small enclosing
+             * rendered block (p/span/div/etc.). This is cheap, but sees the
+             * complete visual line even when React split the text internally.
+             */
+            const inspectNode = node => {
+                let element = node?.nodeType === Node.TEXT_NODE
+                    ? node.parentElement
+                    : node;
+
+                if (!element || element.closest?.('pre, code')) return;
+
+                const turn = Chat.turnFromNode(element);
+                if (!turn || !Chat.isAssistant(turn)) return;
+
+                const message = Chat.message(turn);
+                const root = message || turn;
+                let current = element;
+                let marker = null;
+                let markerElement = null;
+
+                // Inspect only a handful of ancestors. A marker is emitted as
+                // a short standalone line, so there is no reason to scan the
+                // whole reply for every streamed token.
+                for (let depth = 0; current && depth < 8; depth += 1) {
+                    if (current.closest?.('pre, code')) return;
+
+                    const value = String(current.textContent || '').trim();
+
+                    if (value.length <= 180 && value.includes('[[avatar:')) {
+                        Expression.marker.lastIndex = 0;
+                        let match;
+
+                        while ((match = Expression.marker.exec(value)) !== null) {
+                            const candidate = match[1].toLowerCase();
+                            if (CFG.expressions.includes(candidate)) marker = candidate;
+                        }
+
+                        Expression.marker.lastIndex = 0;
+
+                        if (marker) {
+                            if (Expression.exact.test(value)) markerElement = current;
+                            break;
+                        }
