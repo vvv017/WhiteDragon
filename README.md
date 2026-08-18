@@ -4,11 +4,11 @@ A customizable expression-avatar userscript for ChatGPT.
 
 WhiteDragon adds a character portrait beside ChatGPT replies and can switch expressions **while the response is still streaming**. It also supports per-Project avatar packs, sticky portraits for long replies, header renaming, and live layout controls.
 
-> Current release: **4.4.1**
+> Current release: **4.4.2**
 
 ## Quick install
 
-### **[▶ Install WhiteDragon v4.4.1](https://raw.githubusercontent.com/vvv017/WhiteDragon/main/whitedragon.user.js)**
+### **[▶ Install WhiteDragon v4.4.2](https://raw.githubusercontent.com/vvv017/WhiteDragon/main/whitedragon.user.js)**
 
 With Tampermonkey or Violentmonkey installed, the link above should open the userscript installation screen directly.
 
@@ -18,6 +18,7 @@ With Tampermonkey or Violentmonkey installed, the link above should open the use
 - Real-time expression switching during ChatGPT streaming
 - Hidden `[[avatar:...]]` control markers
 - Robust marker detection across split DOM/text nodes
+- **Inline markers are supported** — `Done. [[avatar:smile]]` switches to `smile` and hides only the marker text
 - Per-ChatGPT-Project avatar packs with fallback to the default pack
 - Sticky avatar that follows long replies and stops at the end of the message
 - Long Pro-thinking and tool-execution turns remain recognized as assistant turns
@@ -41,8 +42,6 @@ With Tampermonkey or Violentmonkey installed, the link above should open the use
 5. Reload ChatGPT.
 6. Click the **♥** button in the lower-right corner.
 7. Import your avatar images.
-
-On its first run for a version, the installer downloads the readable source parts from this repository and caches the assembled source locally. Later page loads use that cached source.
 
 ### Required image filenames
 
@@ -89,7 +88,13 @@ Wait—what was that?
 Never mind. Mystery solved.
 ```
 
-While ChatGPT is streaming, each newly completed marker immediately switches the avatar to the newest expression. Marker-only lines are hidden. Markers inside code blocks are ignored.
+Inline markers also work:
+
+```text
+Everything is fixed. [[avatar:smile]]
+```
+
+The visible marker text is removed while the avatar still switches immediately to `smile`. Markers inside code blocks are ignored.
 
 ## Recommended ChatGPT instruction
 
@@ -115,11 +120,10 @@ The panel can be dragged while previewing changes. Double-click the panel header
 
 ## Privacy
 
-WhiteDragon runs locally in your browser after loading its source.
+WhiteDragon runs locally in your browser.
 
 - Avatar images are stored locally in IndexedDB.
-- UI preferences and the assembled source cache are stored locally.
-- On the first run of each version, the installer requests the source parts from `raw.githubusercontent.com`.
+- UI preferences are stored locally.
 - No API key, analytics, or telemetry are included.
 - The script does not send additional prompts or model requests.
 
@@ -136,7 +140,7 @@ ChatGPT changes frequently. If a UI update breaks WhiteDragon, open an issue wit
 
 ## Development
 
-The readable source is split across `src/parts/part-*.part`. The root `whitedragon.user.js` is a small installable loader that fetches and caches those parts. The included GitHub Actions workflow can also concatenate the parts into a standalone userscript and validate it with:
+The readable source is split across `src/parts/part-*.part`; GitHub Actions concatenates the parts into the installable root `whitedragon.user.js` and validates it with:
 
 ```bash
 node --check whitedragon.user.js
