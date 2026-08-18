@@ -1,0 +1,24 @@
+                App.schedule(50);
+                const panel = $(`.${CL.modal}`, $(`#${ID.modal}`));
+                if (!panel) return;
+                const rect = panel.getBoundingClientRect();
+                if (rect.right < 60 || rect.left > innerWidth - 60 || rect.bottom < 40 || rect.top > innerHeight - 40) UI.center(panel);
+            }, { passive: true });
+            addEventListener('popstate', () => App.schedule(100));
+
+            window.WhiteDragonAvatar = Object.freeze({
+                version: CFG.version,
+                refresh: App.refresh,
+                openSettings: UI.open,
+                currentProfile: Profiles.current,
+                branding: Brand.get,
+                applyBranding: Brand.save,
+                layout: Layout.get,
+                applyLayout: Layout.save
+            });
+            console.info(`[WhiteDragon] ${CFG.version} loaded.`);
+        }
+    };
+
+    App.boot().catch(error => console.error('[WhiteDragon] Boot failed:', error));
+})();
