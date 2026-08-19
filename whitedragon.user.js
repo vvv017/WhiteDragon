@@ -301,6 +301,34 @@
             document.documentElement.style.setProperty('--wda4-sticky', `${value.stickyTop}px`);
         },
 
+        /*
+         * ChatGPT may rewrite the <html> style attribute during startup/theme
+         * hydration. The saved layout still exists in localStorage, but our
+         * custom CSS variables can disappear, making the avatar fall back to
+         * the default 64px until Save is pressed again.
+         *
+         * Keep this deliberately cheap: only rewrite the two variables when
+         * their current values no longer match the saved/preview layout.
+         */
+        ensureVars() {
+            const value = Layout.get();
+            const style = document.documentElement.style;
+            const size = `${value.size}px`;
+            const sticky = `${value.stickyTop}px`;
+
+            if (
+                style.getPropertyValue('--wda4-size').trim() !== size
+            ) {
+                style.setProperty('--wda4-size', size);
+            }
+
+            if (
+                style.getPropertyValue('--wda4-sticky').trim() !== sticky
+            ) {
+                style.setProperty('--wda4-sticky', sticky);
+            }
+        },
+
         preview(input) {
             Layout.previewValue = Layout.normalize(input);
             Layout.applyVars(Layout.previewValue);
