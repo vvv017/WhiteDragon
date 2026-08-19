@@ -1322,6 +1322,7 @@
 
         refresh() {
             UI.button();
+            Layout.ensureVars();
             Brand.apply();
             Profiles.requestCurrent();
             const profile = Profiles.current();
