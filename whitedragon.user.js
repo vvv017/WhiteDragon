@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         白龍 WhiteDragon
 // @namespace    https://github.com/vvv017/WhiteDragon
-// @version      4.5.1
+// @version      4.5.2
 // @description  Custom expression avatars for ChatGPT with AI setup helpers, robust streaming markers, Project profiles, sticky positioning, and UI personalization.
 // @homepageURL  https://github.com/vvv017/WhiteDragon
 // @supportURL   https://github.com/vvv017/WhiteDragon/issues
@@ -16,7 +16,7 @@
     'use strict';
 
     const CFG = {
-        version: '4.5.1',
+        version: '4.5.2',
         dbName: 'white_dragon_avatar_db',
         dbVersion: 1,
         storeName: 'avatars',
