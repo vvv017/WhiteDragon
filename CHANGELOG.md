@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.5.2
+
+### Fixed
+
+- Reapply saved avatar size and sticky-position CSS variables when ChatGPT rewrites page-level styles during startup or reload.
+- Prevent saved layout settings from visually falling back to defaults until the user presses Save again.
+
 ## 4.5.1
 
 ### Fixed
