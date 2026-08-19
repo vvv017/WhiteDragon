@@ -4,11 +4,11 @@ A customizable expression-avatar userscript for ChatGPT.
 
 WhiteDragon adds a character portrait beside ChatGPT replies and can switch expressions **while the response is still streaming**. It supports per-Project avatar packs, sticky portraits for long replies, header renaming, live layout controls, and setup helpers for teaching ChatGPT the marker protocol.
 
-> Current release: **4.5.1**
+> Current release: **4.5.2**
 
 ## Quick install
 
-### **[▶ Install WhiteDragon v4.5.1](https://raw.githubusercontent.com/vvv017/WhiteDragon/main/whitedragon.user.js)**
+### **[▶ Install WhiteDragon v4.5.2](https://raw.githubusercontent.com/vvv017/WhiteDragon/main/whitedragon.user.js)**
 
 With Tampermonkey or Violentmonkey installed, the link above should open the userscript installation screen directly.
 
@@ -24,6 +24,7 @@ With Tampermonkey or Violentmonkey installed, the link above should open the use
 - Long Pro-thinking and tool-execution turns keep their avatar
 - Only one assistant avatar visible at a time
 - Adjustable avatar size, horizontal position, vertical offset, and sticky height
+- Saved avatar layout is automatically restored if ChatGPT rewrites page-level style variables during startup
 - Draggable settings panel
 - Custom ChatGPT **header** name, font, and color
 - Local avatar image storage through IndexedDB
@@ -69,13 +70,11 @@ WhiteDragon does **not** ship a character art pack. If an expression is missing,
 
 ## Expression markers
 
-WhiteDragon uses the exact marker syntax:
+WhiteDragon uses markers such as:
 
 ```text
 [[avatar:thinking]]
 ```
-
-Keep `avatar` exactly as written. Do not rename, translate, abbreviate, or substitute the format. For example, `[WhiteDragon:thinking]` and `[avatar:thinking]` are not valid WhiteDragon markers.
 
 A reply can contain multiple markers:
 
@@ -109,9 +108,7 @@ The visible marker text is removed while the avatar still switches immediately. 
 
 WhiteDragon runs in the browser, so ChatGPT cannot automatically know that the userscript exists.
 
-The settings panel includes **Copy expression instructions**, which copies a short instruction describing the exact `[[avatar:expression]]` marker format and the 10 available expressions. It explicitly tells ChatGPT not to rewrite the syntax into variants such as `[WhiteDragon:neutral]`.
-
-Paste the copied instruction into:
+The settings panel includes **Copy expression instructions**, which copies a short instruction describing the exact `[[avatar:expression]]` marker format and the 10 available expressions. Paste it into:
 
 - ChatGPT Custom Instructions for all chats, or
 - Project Instructions for one Project only.
